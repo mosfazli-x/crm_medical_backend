@@ -2,7 +2,7 @@ export const env = {
   isProd: process.env.ENV === 'production',
 
   server: {
-    port: Number(process.env.BACKEND_PORT) || 3001,
+    port: Number(process.env.BACKEND_PORT) || 3101,
   },
 
   db: {
