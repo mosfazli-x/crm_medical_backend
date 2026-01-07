@@ -6,6 +6,7 @@ import { patientRoutes } from './routes/patients'
 import { visitRoutes } from './routes/visits'
 import { authRoutes } from './routes/auth'
 import { userRoutes } from './routes/users'
+import { env } from './config/env'
 
 const start = async () => {
   const app = buildApp()
@@ -18,7 +19,7 @@ const start = async () => {
 
   try {
     const port = Number(process.env.PORT) || 3001
-    await app.listen({ port, host: '0.0.0.0' })
+    await app.listen({ port: env.server.port, host: '0.0.0.0' })
   } catch (err) {
     app.log.error(err)
     process.exit(1)
