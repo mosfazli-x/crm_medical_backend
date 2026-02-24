@@ -1,5 +1,5 @@
 
-import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, numeric, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, integer } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm'
 
 
@@ -68,6 +68,7 @@ export const pregnancies = pgTable('pregnancies', {
     patientId: uuid('patient_id').references(() => patients.id, { onDelete: 'cascade' }),
     type: varchar('type', { length: 50 }),
     outcome: varchar('outcome', { length: 50 }),
+    liveBirths: integer('live_births'),
     pregnancyDate: date('pregnancy_date'),
     notes: text('notes'),
 });

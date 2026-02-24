@@ -4,7 +4,9 @@ import jwt from '@fastify/jwt';
 export const buildApp = () => {
   const app = Fastify({ logger: true })
   app.register(require('@fastify/cors'), {
-    origin: '*'
+    origin: true, // یا آدرس فرانت
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true
   });
   app.register(jwt, {
     secret: process.env.JWT_SECRET || 'your-super-secret-key-change-in-production',

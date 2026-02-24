@@ -1,4 +1,4 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { eq, count } from 'drizzle-orm';
@@ -20,8 +20,7 @@ type LoginBody = z.infer<typeof LoginSchema>;
 type RegisterBody = z.infer<typeof RegisterSchema>;
 
 export async function authRoutes(fastify: FastifyInstance) {
-    // POST /auth/login
-    fastify.post('/login', async (request: FastifyRequest<{ Body: LoginBody }>, reply: FastifyReply) => {
+    fastify.post('/login', async (request, reply) => {
         const result = LoginSchema.safeParse(request.body);
         if (!result.success) {
             return reply.status(400).send({ error: 'داده‌های ورودی نامعتبر', details: result.error });
@@ -83,8 +82,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
     });
 
-    // POST /auth/register - فقط برای اولین کاربر (ادمین/پزشک اصلی)
-    fastify.post('/register', async (request: FastifyRequest<{ Body: RegisterBody }>, reply: FastifyReply) => {
+    fastify.post('/register', async (request, reply) => {
         const result = RegisterSchema.safeParse(request.body);
         if (!result.success) {
             return reply.status(400).send({ error: 'رمز عبور باید حداقل 8 کاراکتر باشد', details: result.error });
@@ -101,8 +99,8 @@ export async function authRoutes(fastify: FastifyInstance) {
                 fullName,
                 passwordHash,
                 role,
-                phoneConfirmed: true,
-                isActive: false,
+                phoneConfirmed: false,
+                status: 'pending',
                 requiresPasswordChange: false,
             })
             .returning({

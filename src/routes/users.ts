@@ -2,7 +2,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { db } from '../db'
 import { users, patients } from '../db/schema'
-import { eq, and, not, inArray } from 'drizzle-orm'
+import { eq, and, not, inArray, desc } from 'drizzle-orm'
 import { z } from 'zod'
 import { requireRole } from '../middleware/roleAuth'
 
@@ -23,7 +23,6 @@ const ApprovePatientSchema = z.object({
 type ApprovePatientBody = z.infer<typeof ApprovePatientSchema>
 
 export async function userRoutes(fastify: FastifyInstance) {
-    // GET /api/users - لیست همه کاربران
     fastify.get('/', { preHandler: requireRole(['admin_doctor']) }, async (request: FastifyRequest, reply: FastifyReply) => {
         try {
             const allUsers = await db
@@ -38,8 +37,7 @@ export async function userRoutes(fastify: FastifyInstance) {
                     createdAt: users.createdAt,
                 })
                 .from(users)
-                .orderBy(users.createdAt, 'desc')
-
+                .orderBy(desc(users.createdAt))
             return reply.status(200).send({
                 success: true,
                 data: allUsers,
@@ -50,8 +48,9 @@ export async function userRoutes(fastify: FastifyInstance) {
         }
     })
 
-    // GET /api/users/:id - جزئیات کاربر
-    fastify.get('/:id', { preHandler: requireRole(['admin_doctor']) }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    fastify.get<{
+        Params: { id: string }
+    }>('/:id', { preHandler: requireRole(['admin_doctor']) }, async (request, reply) => {
         const { id } = request.params
         try {
             const [user] = await db
@@ -67,11 +66,9 @@ export async function userRoutes(fastify: FastifyInstance) {
                 })
                 .from(users)
                 .where(eq(users.id, id))
-
             if (!user) {
                 return reply.status(404).send({ error: 'کاربر یافت نشد' })
             }
-
             return reply.status(200).send({
                 success: true,
                 data: user,
@@ -82,13 +79,13 @@ export async function userRoutes(fastify: FastifyInstance) {
         }
     })
 
-    // POST /api/users/approve/:id - تأیید ساده کاربر (doctor, lab, pharmacy)
-    fastify.post('/approve/:id', { preHandler: requireRole(['admin_doctor']) }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    fastify.post<{
+        Params: { id: string }
+    }>('/approve/:id', { preHandler: requireRole(['admin_doctor']) }, async (request, reply) => {
         const { id } = request.params
-
         try {
             const result = await db.transaction(async (tx) => {
-                const [updatedUser] = await tx
+                const updatedUser = await tx
                     .update(users)
                     .set({
                         status: 'approved',
@@ -127,34 +124,23 @@ export async function userRoutes(fastify: FastifyInstance) {
             return reply.status(500).send({ error: 'خطای سرور' })
         }
     })
-
-    // POST /api/users/reject/:id - رد کاربر (برای pending) → status = 'rejected'
-    fastify.post('/reject/:id', { preHandler: requireRole(['admin_doctor']) }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    fastify.post<{ Params: { id: string } }>('/reject/:id', { preHandler: requireRole(['admin_doctor']) }, async (request, reply) => {
         const { id } = request.params
-
         try {
             const result = await db.transaction(async (tx) => {
-                const [updatedUser] = await tx
+                const updatedUser = await tx
                     .update(users)
                     .set({
                         status: 'rejected',
                         updatedAt: new Date(),
                     })
                     .where(and(eq(users.id, id), eq(users.status, 'pending')))
-                    .returning({
-                        id: users.id,
-                        fullName: users.fullName,
-                        role: users.role,
-                        status: users.status,
-                    })
-
+                    .returning()
                 if (updatedUser.length === 0) {
                     throw { status: 404, message: 'کاربر یافت نشد یا قبلاً پردازش شده است' }
                 }
-
                 return updatedUser[0]
             })
-
             return reply.status(200).send({
                 success: true,
                 message: 'کاربر با موفقیت رد شد (غیرفعال)',
@@ -169,13 +155,11 @@ export async function userRoutes(fastify: FastifyInstance) {
         }
     })
 
-    // POST /api/users/deactivate/:id - غیرفعال کردن کاربر approved → status = 'rejected'
-    fastify.post('/deactivate/:id', { preHandler: requireRole(['admin_doctor']) }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    fastify.post<{ Params: { id: string } }>('/deactivate/:id', { preHandler: requireRole(['admin_doctor']) }, async (request, reply) => {
         const { id } = request.params
-
         try {
             const result = await db.transaction(async (tx) => {
-                const [updatedUser] = await tx
+                const updatedUser = await tx
                     .update(users)
                     .set({
                         status: 'rejected',
@@ -188,14 +172,11 @@ export async function userRoutes(fastify: FastifyInstance) {
                         role: users.role,
                         status: users.status,
                     })
-
                 if (updatedUser.length === 0) {
                     throw { status: 404, message: 'کاربر یافت نشد یا قبلاً غیرفعال شده است' }
                 }
-
                 return updatedUser[0]
             })
-
             return reply.status(200).send({
                 success: true,
                 message: 'کاربر با موفقیت غیرفعال شد',
@@ -209,14 +190,11 @@ export async function userRoutes(fastify: FastifyInstance) {
             return reply.status(500).send({ error: 'خطای سرور' })
         }
     })
-
-    // POST /api/users/activate/:id - فعال کردن مجدد کاربر rejected → status = 'approved'
-    fastify.post('/activate/:id', { preHandler: requireRole(['admin_doctor']) }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    fastify.post<{ Params: { id: string } }>('/activate/:id', { preHandler: requireRole(['admin_doctor']) }, async (request, reply) => {
         const { id } = request.params
-
         try {
             const result = await db.transaction(async (tx) => {
-                const [updatedUser] = await tx
+                const updatedUser = await tx
                     .update(users)
                     .set({
                         status: 'approved',
@@ -229,14 +207,11 @@ export async function userRoutes(fastify: FastifyInstance) {
                         role: users.role,
                         status: users.status,
                     })
-
                 if (updatedUser.length === 0) {
                     throw { status: 404, message: 'کاربر یافت نشد یا وضعیت مناسب برای فعال کردن ندارد' }
                 }
-
                 return updatedUser[0]
             })
-
             return reply.status(200).send({
                 success: true,
                 message: 'کاربر با موفقیت فعال شد',
@@ -250,23 +225,18 @@ export async function userRoutes(fastify: FastifyInstance) {
             return reply.status(500).send({ error: 'خطای سرور' })
         }
     })
-
-    fastify.post('/approve-patient/:id', { preHandler: requireRole(['admin_doctor']) }, async (request: FastifyRequest<{
+    fastify.post<{
         Params: { id: string }
         Body: ApprovePatientBody
-    }>, reply: FastifyReply) => {
+    }>('/approve-patient/:id', { preHandler: requireRole(['admin_doctor']) }, async (request, reply) => {
         const { id } = request.params
         const result = ApprovePatientSchema.safeParse(request.body)
-
         if (!result.success) {
-            return reply.status(400).send({ error: 'داده‌های ورودی نامعتبر', details: result.error.errors })
+            return reply.status(400).send({ error: 'داده‌های ورودی نامعتبر', details: result.error })
         }
-
         const patientData = result.data
-
         try {
             const data = await db.transaction(async (tx) => {
-                // 1. ایجاد پرونده patient جدید
                 const [newPatient] = await tx
                     .insert(patients)
                     .values({
@@ -284,16 +254,11 @@ export async function userRoutes(fastify: FastifyInstance) {
                         lastName: patients.lastName,
                         nationalId: patients.nationalId,
                     })
-
-                // 2. sync phone از user
                 const [userPhone] = await tx.select({ phone: users.phone }).from(users).where(eq(users.id, id))
-
                 if (userPhone?.phone) {
                     await tx.update(patients).set({ phone: userPhone.phone }).where(eq(patients.id, newPatient.id))
                 }
-
-                // 3. لینک و تأیید user
-                const [updatedUser] = await tx
+                const updatedUser = await tx
                     .update(users)
                     .set({
                         patientId: newPatient.id,
@@ -308,14 +273,11 @@ export async function userRoutes(fastify: FastifyInstance) {
                         status: users.status,
                         patientId: users.patientId,
                     })
-
                 if (updatedUser.length === 0) {
                     throw { status: 400, message: 'کاربر بیمار نیست یا قبلاً تأیید شده' }
                 }
-
                 return { patient: newPatient, user: updatedUser[0] }
             })
-
             return reply.status(200).send({
                 success: true,
                 message: 'بیمار با موفقیت تأیید و پرونده ایجاد شد',
