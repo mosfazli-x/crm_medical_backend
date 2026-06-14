@@ -22,6 +22,20 @@
       "when": 1767606016815,
       "tag": "0002_organic_kitty_pryde",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781123253555,
+      "tag": "0003_lively_wiccan",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781195816493,
+      "tag": "0004_silly_guardsmen",
+      "breakpoints": true
     }
   ]
 }

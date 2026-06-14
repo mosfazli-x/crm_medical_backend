@@ -1,5 +1,5 @@
 
-import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, integer, jsonb } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm'
 
 
@@ -64,13 +64,46 @@ export const visits = pgTable('visits', {
 });
 
 export const pregnancies = pgTable('pregnancies', {
-    id: uuid('id').primaryKey().defaultRandom(),
-    patientId: uuid('patient_id').references(() => patients.id, { onDelete: 'cascade' }),
-    type: varchar('type', { length: 50 }),
-    outcome: varchar('outcome', { length: 50 }),
-    liveBirths: integer('live_births'),
-    pregnancyDate: date('pregnancy_date'),
+    id: uuid('id').defaultRandom().primaryKey(),
+    patientId: uuid('patient_id').references(() => patients.id).notNull(),
+
+    // تعداد بارداری (بارداری چندم بیمار است)
+    gravidaIndex: integer('gravida_index'),
+
+    // وضعیت بارداری: 'current' (فعلی) یا 'completed' (پایان‌یافته)
+    status: varchar('status', { length: 20 }).notNull().default('completed'),
+
+    // اطلاعات زمان‌بندی تخصصی
+    lmp: date('lmp'), // تاریخ آخرین قاعدگی (Last Menstrual Period)
+    edd: date('edd'), // تاریخ تخمینی زایمان (Estimated Date of Delivery)
+    endDate: date('end_date'), // تاریخ خاتمه بارداری یا زایمان
+    gestationalAgeWeeks: integer('gestational_age_weeks'), // سن بارداری به هفته
+    gestationalAgeDays: integer('gestational_age_days'),   // سن بارداری به روز
+
+    // نتیجه بارداری
+    // 'live_birth' | 'stillbirth' (مرده‌زایی) | 'miscarriage' (سقط خودبه‌خودی) | 'abortion' (سقط عمدی/پزشکی) | 'ectopic' (خارج از رحم) | 'molar' (مولار)
+    outcome: varchar('outcome', { length: 30 }),
+
+    // جزئیات زایمان و بیهوشی
+    // 'nvd' (طبیعی) | 'c_section_elective' (سزارین اختیاری) | 'c_section_emergency' (سزارین اورژانسی) | 'forceps_vacuum'
+    deliveryMethod: varchar('delivery_method', { length: 40 }),
+    // 'none' | 'spinal' | 'epidural' | 'general'
+    anesthesiaType: varchar('anesthesia_type', { length: 30 }),
+
+    // عوارض مادری در این بارداری (به صورت آرایه‌ای از استرینگ‌ها یا متن)
+    // مانند: دیابت بارداری (GDM)، پره‌اکلامپسی، فشار خون، خونریزی و...
+    maternalComplications: jsonb('maternal_complications').default([]),
+
+    // اطلاعات غربالگری‌ها و مراقبت‌های دوران بارداری (به صورت سناریوهای داینامیک)
+    prenatalScreenings: jsonb('prenatal_screenings').default({}),
+
+    // جزئیات نوزاد / نوزادان (آرایه‌ای برای پشتیبانی از دوقلو/چندقلو)
+    // ساختار: [{ gender: 'male', weight: 3200, apgar5: 9, bloodType: 'O+', nicu: false }]
+    newbornsDetails: jsonb('newborns_details').default([]),
+
     notes: text('notes'),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
 });
 
 export const users = pgTable('users', {
@@ -103,4 +136,15 @@ export const users = pgTable('users', {
       (role != 'patient')
     )`,
     };
+});
+
+export const attachments = pgTable('attachments', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    patientId: uuid('patient_id')
+        .notNull()
+        .references(() => patients.id, { onDelete: 'cascade' }), // در صورت حذف بیمار، فایل‌ها هم حذف شوند
+    fileType: varchar('file_type', { length: 50 }).notNull(), // 'ultrasound' | 'lab' | 'prescription'
+    fileName: text('file_name').notNull(), // نام اصلی فایل (مثلا scan.jpg)
+    filePath: text('file_path').notNull(), // مسیر ذخیره شده روی سرور (مثلا /uploads/12345.jpg)
+    createdAt: timestamp('created_at').defaultNow().notNull(),
 });

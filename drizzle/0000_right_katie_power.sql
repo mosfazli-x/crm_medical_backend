@@ -46,9 +46,25 @@ CREATE TABLE "pregnancies" (
 	"patient_id" uuid,
 	"type" varchar(50),
 	"outcome" varchar(50),
-	"live_births": number,
+	"live_births" integer,
 	"pregnancy_date" date,
 	"notes" text
+);
+--> statement-breakpoint
+CREATE TABLE "users" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"phone" varchar(20) NOT NULL,
+	"password_hash" text NOT NULL,
+	"role" varchar(20) NOT NULL,
+	"patient_id" uuid,
+	"full_name" varchar(200),
+	"organization_name" varchar(200),
+	"phone_confirmed" boolean DEFAULT false,
+	"status" varchar(20) DEFAULT 'pending' NOT NULL,
+	"requires_password_change" boolean DEFAULT true,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "users_phone_unique" UNIQUE("phone")
 );
 --> statement-breakpoint
 CREATE TABLE "visits" (
@@ -66,26 +82,9 @@ CREATE TABLE "visits" (
 	"created_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
-ALTER TABLE "users" DROP CONSTRAINT "users_email_unique";--> statement-breakpoint
-ALTER TABLE "users" ALTER COLUMN "id" SET DATA TYPE uuid;--> statement-breakpoint
-ALTER TABLE "users" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
-ALTER TABLE "users" ALTER COLUMN "created_at" SET NOT NULL;--> statement-breakpoint
-ALTER TABLE "users" ADD COLUMN "phone" varchar(20) NOT NULL;--> statement-breakpoint
-ALTER TABLE "users" ADD COLUMN "password_hash" text NOT NULL;--> statement-breakpoint
-ALTER TABLE "users" ADD COLUMN "role" varchar(20) NOT NULL;--> statement-breakpoint
-ALTER TABLE "users" ADD COLUMN "patient_id" uuid;--> statement-breakpoint
-ALTER TABLE "users" ADD COLUMN "full_name" varchar(200);--> statement-breakpoint
-ALTER TABLE "users" ADD COLUMN "organization_name" varchar(200);--> statement-breakpoint
-ALTER TABLE "users" ADD COLUMN "phone_confirmed" boolean DEFAULT false;--> statement-breakpoint
-ALTER TABLE "users" ADD COLUMN "is_active" boolean DEFAULT true;--> statement-breakpoint
-ALTER TABLE "users" ADD COLUMN "requires_password_change" boolean DEFAULT true;--> statement-breakpoint
-ALTER TABLE "users" ADD COLUMN "updated_at" timestamp DEFAULT now() NOT NULL;--> statement-breakpoint
 ALTER TABLE "allergies" ADD CONSTRAINT "allergies_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "public"."patients"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "diseases" ADD CONSTRAINT "diseases_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "public"."patients"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "medications" ADD CONSTRAINT "medications_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "public"."patients"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pregnancies" ADD CONSTRAINT "pregnancies_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "public"."patients"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "visits" ADD CONSTRAINT "visits_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "public"."patients"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "users" ADD CONSTRAINT "users_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "public"."patients"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "users" DROP COLUMN "email";--> statement-breakpoint
-ALTER TABLE "users" DROP COLUMN "name";--> statement-breakpoint
-ALTER TABLE "users" ADD CONSTRAINT "users_phone_unique" UNIQUE("phone");
+ALTER TABLE "visits" ADD CONSTRAINT "visits_patient_id_patients_id_fk" FOREIGN KEY ("patient_id") REFERENCES "public"."patients"("id") ON DELETE cascade ON UPDATE no action;

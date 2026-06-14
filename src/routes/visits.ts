@@ -1,6 +1,6 @@
 // src/routes/visits.ts
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
-import { db } from '../db'
+// use fastify.db (decorated by plugins/db) for better DI/testability
 import { patients, visits } from '../db/schema'
 import { eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -20,7 +20,7 @@ const UpdateVisitSchema = z.object({
 export async function visitRoutes(fastify: FastifyInstance) {
     fastify.get('/patients', { preHandler: requireRole(['admin_doctor', 'doctor']) }, async (request: FastifyRequest, reply: FastifyReply) => {
         try {
-            const patientList = await db
+            const patientList = await fastify.db
                 .select({
                     id: patients.id,
                     fullName: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`.as('full_name'),
@@ -43,7 +43,7 @@ export async function visitRoutes(fastify: FastifyInstance) {
     // ۲. GET /api/visits - ویزیت‌ها برای تقویم (events)
     fastify.get('/', { preHandler: requireRole(['admin_doctor', 'doctor']) }, async (request: FastifyRequest, reply: FastifyReply) => {
         try {
-            const appointments = await db
+            const appointments = await fastify.db
                 .select({
                     id: visits.id,
                     title: sql<string>`${patients.firstName} || ' ' || ${patients.lastName}`.as('full_name'),
@@ -125,7 +125,7 @@ export async function visitRoutes(fastify: FastifyInstance) {
         const { patientId, visitDate, visitType, visitReason, notes, durationMinutes } = result.data
 
         try {
-            const [newVisit] = await db.insert(visits).values({
+            const [newVisit] = await fastify.db.insert(visits).values({
                 patientId,
                 visitType: visitType || 'ویزیت اولیه',
                 visitReason: visitReason || null,
@@ -165,7 +165,7 @@ export async function visitRoutes(fastify: FastifyInstance) {
         const updates = result.data; // فقط فیلدهایی که ارسال شدن
 
         try {
-            const [updatedVisit] = await db
+            const [updatedVisit] = await fastify.db
                 .update(visits)
                 .set({
                     // فقط فیلدهای موجود رو set می‌کنیم
@@ -208,7 +208,7 @@ export async function visitRoutes(fastify: FastifyInstance) {
             const { id } = request.params
 
             try {
-                const [deletedVisit] = await db
+                const [deletedVisit] = await fastify.db
                     .delete(visits)
                     .where(eq(visits.id, id))
                     .returning()

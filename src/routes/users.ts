@@ -1,6 +1,6 @@
 // src/routes/users.ts
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
-import { db } from '../db'
+// use fastify.db (decorated by plugins/db) for better DI/testability
 import { users, patients } from '../db/schema'
 import { eq, and, not, inArray, desc } from 'drizzle-orm'
 import { z } from 'zod'
@@ -25,7 +25,7 @@ type ApprovePatientBody = z.infer<typeof ApprovePatientSchema>
 export async function userRoutes(fastify: FastifyInstance) {
     fastify.get('/', { preHandler: requireRole(['admin_doctor']) }, async (request: FastifyRequest, reply: FastifyReply) => {
         try {
-            const allUsers = await db
+            const allUsers = await fastify.db
                 .select({
                     id: users.id,
                     phone: users.phone,
@@ -53,7 +53,7 @@ export async function userRoutes(fastify: FastifyInstance) {
     }>('/:id', { preHandler: requireRole(['admin_doctor']) }, async (request, reply) => {
         const { id } = request.params
         try {
-            const [user] = await db
+            const [user] = await fastify.db
                 .select({
                     id: users.id,
                     phone: users.phone,
@@ -84,7 +84,7 @@ export async function userRoutes(fastify: FastifyInstance) {
     }>('/approve/:id', { preHandler: requireRole(['admin_doctor']) }, async (request, reply) => {
         const { id } = request.params
         try {
-            const result = await db.transaction(async (tx) => {
+            const result = await fastify.db.transaction(async (tx) => {
                 const updatedUser = await tx
                     .update(users)
                     .set({
@@ -127,7 +127,7 @@ export async function userRoutes(fastify: FastifyInstance) {
     fastify.post<{ Params: { id: string } }>('/reject/:id', { preHandler: requireRole(['admin_doctor']) }, async (request, reply) => {
         const { id } = request.params
         try {
-            const result = await db.transaction(async (tx) => {
+            const result = await fastify.db.transaction(async (tx) => {
                 const updatedUser = await tx
                     .update(users)
                     .set({
@@ -158,7 +158,7 @@ export async function userRoutes(fastify: FastifyInstance) {
     fastify.post<{ Params: { id: string } }>('/deactivate/:id', { preHandler: requireRole(['admin_doctor']) }, async (request, reply) => {
         const { id } = request.params
         try {
-            const result = await db.transaction(async (tx) => {
+            const result = await fastify.db.transaction(async (tx) => {
                 const updatedUser = await tx
                     .update(users)
                     .set({
@@ -193,7 +193,7 @@ export async function userRoutes(fastify: FastifyInstance) {
     fastify.post<{ Params: { id: string } }>('/activate/:id', { preHandler: requireRole(['admin_doctor']) }, async (request, reply) => {
         const { id } = request.params
         try {
-            const result = await db.transaction(async (tx) => {
+            const result = await fastify.db.transaction(async (tx: any) => {
                 const updatedUser = await tx
                     .update(users)
                     .set({
@@ -236,7 +236,7 @@ export async function userRoutes(fastify: FastifyInstance) {
         }
         const patientData = result.data
         try {
-            const data = await db.transaction(async (tx) => {
+            const data = await fastify.db.transaction(async (tx) => {
                 const [newPatient] = await tx
                     .insert(patients)
                     .values({
