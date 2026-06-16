@@ -90,5 +90,11 @@ export const UpdatePatientSchema = z.object({
   ]).optional(),
 })
 
+export const SendSmsSchema = z.object({
+  phone: z.string().regex(/^09\d{9}$/, 'Phone must be a valid Iranian mobile number'),
+  text: z.string().min(1, 'Message text is required').max(1000, 'Message text must not exceed 1000 characters'),
+})
+
 export type CreatePatientDto = z.infer<typeof CreatePatientSchema>
 export type UpdatePatientDto = z.infer<typeof UpdatePatientSchema>
+export type SendSmsDto = z.infer<typeof SendSmsSchema>

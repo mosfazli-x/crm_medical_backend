@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { PatientService } from './patients.service'
-import { CreatePatientSchema, UpdatePatientSchema } from './patients.schema'
+import { CreatePatientSchema, UpdatePatientSchema, SendSmsSchema } from './patients.schema'
 import { saveMultipartFiles, cleanupFiles } from '../../shared/utils/multipart'
 import { fileService } from '../../shared/services'
 import { smsService } from '../../shared/services'
@@ -94,6 +94,15 @@ export class PatientController {
     }
   }
 
+  async sendSms(request: FastifyRequest, reply: FastifyReply) {
+    const body = SendSmsSchema.parse(request.body)
+    const success = await smsService.send(body.phone, body.text)
+    if (success) {
+      return reply.status(200).send({ success: true, message: 'SMS sent successfully' })
+    }
+    return reply.status(502).send({ success: false, error: 'Failed to send SMS' })
+  }
+
   async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     const { id } = request.params
     const result = await this.patientService.softDelete(id)
@@ -101,6 +110,18 @@ export class PatientController {
       success: true,
       message: 'Patient deleted successfully (soft delete)',
       patient: result,
+    })
+  }
+
+  async deleteAttachment(
+    request: FastifyRequest<{ Params: { patientId: string; attachmentId: string } }>,
+    reply: FastifyReply
+  ) {
+    const { patientId, attachmentId } = request.params
+    await this.patientService.deleteAttachment(patientId, attachmentId)
+    return reply.status(200).send({
+      success: true,
+      message: 'Attachment deleted successfully',
     })
   }
 }

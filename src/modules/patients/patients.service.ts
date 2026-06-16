@@ -1,3 +1,4 @@
+import path from 'node:path'
 import type { DB } from '../../db/client'
 import {
   patients,
@@ -11,6 +12,7 @@ import {
 import { eq, and, notInArray, desc, sql } from 'drizzle-orm'
 import { NotFoundError, ConflictError } from '../../shared/errors'
 import { getInsuranceInfo } from '../../shared/constants/insurance'
+import { fileService } from '../../shared/services'
 import type { CreatePatientDto, UpdatePatientDto } from './patients.schema'
 
 export class PatientService {
@@ -277,6 +279,24 @@ export class PatientService {
     })
 
     return result
+  }
+
+  async deleteAttachment(patientId: string, attachmentId: string) {
+    return this.db.transaction(async (tx) => {
+      const [attachment] = await tx
+        .select()
+        .from(attachments)
+        .where(and(eq(attachments.id, attachmentId), eq(attachments.patientId, patientId)))
+
+      if (!attachment) throw new NotFoundError('Attachment')
+
+      const filename = path.basename(attachment.filePath)
+      await fileService.deleteFile(filename)
+
+      await tx.delete(attachments).where(eq(attachments.id, attachmentId))
+
+      return { id: attachmentId }
+    })
   }
 
   async softDelete(id: string) {

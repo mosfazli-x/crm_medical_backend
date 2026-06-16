@@ -15,5 +15,13 @@ export async function patientRoutes(fastify: FastifyInstance) {
 
   fastify.post<{ Params: { id: string } }>('/:id', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.update(req, rep))
 
+  fastify.post('/send-sms', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.sendSms(req, rep))
+
   fastify.delete<{ Params: { id: string } }>('/:id', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.delete(req, rep))
+
+  fastify.delete<{ Params: { patientId: string; attachmentId: string } }>(
+    '/:patientId/attachments/:attachmentId',
+    { preHandler: requireRole('admin_doctor', 'doctor') },
+    (req, rep) => controller.deleteAttachment(req, rep)
+  )
 }

@@ -36,7 +36,7 @@ export async function buildApp() {
       fieldNameSize: 100,
       fieldSize: 1_000_000,
       fileSize: 10 * 1024 * 1024,
-      files: 10,
+      files: 50,
     },
     attachFieldsToBody: false,
   })
