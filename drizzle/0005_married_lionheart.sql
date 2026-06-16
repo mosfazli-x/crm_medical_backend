@@ -1,0 +1,1 @@
+ALTER TABLE "patients" ADD COLUMN "insurance_type" varchar(50);

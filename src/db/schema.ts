@@ -1,7 +1,6 @@
 
 import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, integer, jsonb } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm'
-
+import { relations, sql } from 'drizzle-orm'
 
 export const patients = pgTable('patients', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -9,6 +8,7 @@ export const patients = pgTable('patients', {
     lastName: varchar('last_name', { length: 100 }).notNull(),
     nationalId: char('national_id', { length: 10 }).unique().notNull(),
     insuranceCode: varchar('insurance_code', { length: 50 }),
+    insuranceType: varchar('insurance_type', { length: 50 }),
     birthDate: date('birth_date'),
     phone: varchar('phone', { length: 20 }),
     address: text('address'),
@@ -66,41 +66,19 @@ export const visits = pgTable('visits', {
 export const pregnancies = pgTable('pregnancies', {
     id: uuid('id').defaultRandom().primaryKey(),
     patientId: uuid('patient_id').references(() => patients.id).notNull(),
-
-    // تعداد بارداری (بارداری چندم بیمار است)
     gravidaIndex: integer('gravida_index'),
-
-    // وضعیت بارداری: 'current' (فعلی) یا 'completed' (پایان‌یافته)
     status: varchar('status', { length: 20 }).notNull().default('completed'),
-
-    // اطلاعات زمان‌بندی تخصصی
-    lmp: date('lmp'), // تاریخ آخرین قاعدگی (Last Menstrual Period)
-    edd: date('edd'), // تاریخ تخمینی زایمان (Estimated Date of Delivery)
-    endDate: date('end_date'), // تاریخ خاتمه بارداری یا زایمان
-    gestationalAgeWeeks: integer('gestational_age_weeks'), // سن بارداری به هفته
-    gestationalAgeDays: integer('gestational_age_days'),   // سن بارداری به روز
-
-    // نتیجه بارداری
-    // 'live_birth' | 'stillbirth' (مرده‌زایی) | 'miscarriage' (سقط خودبه‌خودی) | 'abortion' (سقط عمدی/پزشکی) | 'ectopic' (خارج از رحم) | 'molar' (مولار)
+    lmp: date('lmp'),
+    edd: date('edd'),
+    endDate: date('end_date'),
+    gestationalAgeWeeks: integer('gestational_age_weeks'),
+    gestationalAgeDays: integer('gestational_age_days'),
     outcome: varchar('outcome', { length: 30 }),
-
-    // جزئیات زایمان و بیهوشی
-    // 'nvd' (طبیعی) | 'c_section_elective' (سزارین اختیاری) | 'c_section_emergency' (سزارین اورژانسی) | 'forceps_vacuum'
     deliveryMethod: varchar('delivery_method', { length: 40 }),
-    // 'none' | 'spinal' | 'epidural' | 'general'
     anesthesiaType: varchar('anesthesia_type', { length: 30 }),
-
-    // عوارض مادری در این بارداری (به صورت آرایه‌ای از استرینگ‌ها یا متن)
-    // مانند: دیابت بارداری (GDM)، پره‌اکلامپسی، فشار خون، خونریزی و...
     maternalComplications: jsonb('maternal_complications').default([]),
-
-    // اطلاعات غربالگری‌ها و مراقبت‌های دوران بارداری (به صورت سناریوهای داینامیک)
     prenatalScreenings: jsonb('prenatal_screenings').default({}),
-
-    // جزئیات نوزاد / نوزادان (آرایه‌ای برای پشتیبانی از دوقلو/چندقلو)
-    // ساختار: [{ gender: 'male', weight: 3200, apgar5: 9, bloodType: 'O+', nicu: false }]
     newbornsDetails: jsonb('newborns_details').default([]),
-
     notes: text('notes'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
@@ -142,9 +120,35 @@ export const attachments = pgTable('attachments', {
     id: uuid('id').defaultRandom().primaryKey(),
     patientId: uuid('patient_id')
         .notNull()
-        .references(() => patients.id, { onDelete: 'cascade' }), // در صورت حذف بیمار، فایل‌ها هم حذف شوند
-    fileType: varchar('file_type', { length: 50 }).notNull(), // 'ultrasound' | 'lab' | 'prescription'
-    fileName: text('file_name').notNull(), // نام اصلی فایل (مثلا scan.jpg)
-    filePath: text('file_path').notNull(), // مسیر ذخیره شده روی سرور (مثلا /uploads/12345.jpg)
+        .references(() => patients.id, { onDelete: 'cascade' }),
+    fileType: varchar('file_type', { length: 50 }).notNull(),
+    fileName: text('file_name').notNull(),
+    filePath: text('file_path').notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const doctorAvailability = pgTable('doctor_availability', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    doctorId: uuid('doctor_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    dayOfWeek: integer('day_of_week').notNull(),
+    startTime: varchar('start_time', { length: 5 }).notNull(),
+    endTime: varchar('end_time', { length: 5 }).notNull(),
+    isActive: boolean('is_active').default(true),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const appointments = pgTable('appointments', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    doctorId: uuid('doctor_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    appointmentDate: date('appointment_date').notNull(),
+    startTime: varchar('start_time', { length: 5 }).notNull(),
+    endTime: varchar('end_time', { length: 5 }).notNull(),
+    status: varchar('status', { length: 20 }).default('pending'),
+    patientFirstName: varchar('patient_first_name', { length: 100 }).notNull(),
+    patientLastName: varchar('patient_last_name', { length: 100 }).notNull(),
+    patientNationalId: varchar('patient_national_id', { length: 10 }).notNull(),
+    patientPhone: varchar('patient_phone', { length: 20 }).notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
 });
