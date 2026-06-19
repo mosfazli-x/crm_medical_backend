@@ -60,6 +60,16 @@ export async function buildApp() {
   await app.register(visitRoutes, { prefix: '/api/visits' })
   await app.register(userRoutes, { prefix: '/api/users' })
   await app.register(schedulingRoutes, { prefix: '/api/scheduling' })
+  await app.register(visitTypesRoutes, { prefix: '/api/visit-types' })
+
+  await app.register(reproductiveRoutes, { prefix: '/api/reproductive' })
+  await app.register(screeningRoutes, { prefix: '/api/screening' })
+  await app.register(labResultsRoutes, { prefix: '/api/lab-results' })
+  await app.register(clinicalRoutes, { prefix: '/api/clinical' })
+  await app.register(billingRoutes, { prefix: '/api/billing' })
+  await app.register(pregnancyRoutes, { prefix: '/api/pregnancy' })
+  await app.register(messagingRoutes, { prefix: '/api/messaging' })
+  await app.register(consentRoutes, { prefix: '/api/consent' })
 
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 
@@ -75,3 +85,12 @@ import { patientRoutes } from './modules/patients'
 import { visitRoutes } from './modules/visits'
 import { userRoutes } from './modules/users'
 import { schedulingRoutes } from './modules/scheduling'
+import { reproductiveRoutes } from './modules/reproductive'
+import { screeningRoutes } from './modules/screening'
+import { labResultsRoutes } from './modules/lab-results'
+import { clinicalRoutes } from './modules/clinical'
+import { billingRoutes } from './modules/billing'
+import { pregnancyRoutes } from './modules/pregnancy'
+import { messagingRoutes } from './modules/messaging'
+import { consentRoutes } from './modules/consent'
+import { visitTypesRoutes } from './modules/visit-types'

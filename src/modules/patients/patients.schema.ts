@@ -28,6 +28,11 @@ export const CreatePatientSchema = z.object({
     phone: z.string().regex(/^09\d{9}$/).optional().or(z.literal('')),
     address: z.string().optional().nullable(),
     marital_status: z.string().optional().nullable(),
+    smoking: z.string().optional().nullable(),
+    bmi: z.number().positive().optional().nullable(),
+    exercise: z.string().optional().nullable(),
+    alcohol: z.string().optional().nullable(),
+    confidential_notes: z.string().optional().nullable(),
     diseases: z.array(z.object({
       name: z.string().min(1),
       diagnosed_at: z.string().nullable().optional(),
@@ -68,6 +73,11 @@ export const UpdatePatientSchema = z.object({
     phone: z.string().regex(/^09\d{9}$/).optional().or(z.literal('')),
     address: z.string().optional().nullable(),
     marital_status: z.string().optional().nullable(),
+    smoking: z.string().optional().nullable(),
+    bmi: z.number().positive().optional().nullable(),
+    exercise: z.string().optional().nullable(),
+    alcohol: z.string().optional().nullable(),
+    confidential_notes: z.string().optional().nullable(),
     diseases: z.array(z.object({
       id: z.string().optional(),
       name: z.string().min(1),
@@ -95,6 +105,15 @@ export const SendSmsSchema = z.object({
   text: z.string().min(1, 'Message text is required').max(1000, 'Message text must not exceed 1000 characters'),
 })
 
+export const SearchPatientsSchema = z.object({
+  q: z.string().optional(),
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  phone: z.string().optional(),
+  national_id: z.string().optional(),
+})
+
 export type CreatePatientDto = z.infer<typeof CreatePatientSchema>
 export type UpdatePatientDto = z.infer<typeof UpdatePatientSchema>
 export type SendSmsDto = z.infer<typeof SendSmsSchema>
+export type SearchPatientsDto = z.infer<typeof SearchPatientsSchema>

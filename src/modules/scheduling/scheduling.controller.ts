@@ -6,6 +6,7 @@ import {
   BookAppointmentSchema,
   UpdateAppointmentStatusSchema,
 } from './scheduling.schema'
+import { smsService } from '../../shared/services'
 
 export class SchedulingController {
   constructor(private schedulingService: SchedulingService) {}
@@ -69,7 +70,15 @@ export class SchedulingController {
 
   async bookAppointment(request: FastifyRequest, reply: FastifyReply) {
     const dto = BookAppointmentSchema.parse(request.body)
-    const appointment = await this.schedulingService.bookAppointment(dto)
+    const { appointment, doctorName } = await this.schedulingService.bookAppointment(dto)
+
+    if (appointment.patientPhone) {
+      smsService.send(
+        appointment.patientPhone,
+        `نوبت شما در تاریخ ${appointment.appointmentDate} ساعت ${appointment.startTime} با دکتر ${doctorName} با موفقیت ثبت شد.\nآدرس کلینیک: تهران-پاسداران، بستان ۸، ساختمان مهرب`
+      )
+    }
+
     return reply.status(201).send({
       success: true,
       message: 'Appointment booked successfully',

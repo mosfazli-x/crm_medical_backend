@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { PatientService } from './patients.service'
-import { CreatePatientSchema, UpdatePatientSchema, SendSmsSchema } from './patients.schema'
+import { CreatePatientSchema, UpdatePatientSchema, SendSmsSchema, SearchPatientsSchema } from './patients.schema'
 import { saveMultipartFiles, cleanupFiles } from '../../shared/utils/multipart'
 import { fileService } from '../../shared/services'
 import { smsService } from '../../shared/services'
@@ -48,6 +48,12 @@ export class PatientController {
 
   async findAll(_request: FastifyRequest, reply: FastifyReply) {
     const data = await this.patientService.findAll()
+    return reply.status(200).send({ success: true, data })
+  }
+
+  async search(request: FastifyRequest, reply: FastifyReply) {
+    const query = SearchPatientsSchema.parse(request.query)
+    const data = await this.patientService.search(query)
     return reply.status(200).send({ success: true, data })
   }
 

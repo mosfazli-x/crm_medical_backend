@@ -11,6 +11,8 @@ export async function patientRoutes(fastify: FastifyInstance) {
 
   fastify.get('/', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.findAll(req, rep))
 
+  fastify.get('/search', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.search(req, rep))
+
   fastify.get<{ Params: { id: string } }>('/:id', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.findById(req, rep))
 
   fastify.post<{ Params: { id: string } }>('/:id', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.update(req, rep))

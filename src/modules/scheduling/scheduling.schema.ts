@@ -31,6 +31,7 @@ export const BookAppointmentSchema = z.object({
   appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)'),
   startTime: z.string().regex(timePattern, 'Invalid time format (HH:MM)'),
   endTime: z.string().regex(timePattern, 'Invalid time format (HH:MM)'),
+  visitTypeId: z.string().uuid('Invalid visit type ID').optional(),
   patientFirstName: z.string().min(1, 'First name is required').max(100),
   patientLastName: z.string().min(1, 'Last name is required').max(100),
   patientNationalId: z.string().length(10, 'National ID must be exactly 10 characters').regex(/^\d{10}$/, 'National ID must be numeric'),

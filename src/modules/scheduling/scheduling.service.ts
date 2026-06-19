@@ -1,6 +1,6 @@
 import type { DB } from '../../db/client'
-import { users, doctorAvailability, appointments } from '../../db/schema'
-import { and, eq, gte, lte, sql } from 'drizzle-orm'
+import { users, doctorAvailability, appointments, doctorVisitTypes } from '../../db/schema'
+import { and, eq, sql } from 'drizzle-orm'
 import { NotFoundError, ConflictError } from '../../shared/errors'
 import type { CreateAvailabilityDto, UpdateAvailabilityDto, BookAppointmentDto, UpdateAppointmentStatusDto } from './scheduling.schema'
 
@@ -212,6 +212,7 @@ export class SchedulingService {
         appointmentDate: dto.appointmentDate,
         startTime: dto.startTime,
         endTime: dto.endTime,
+        visitTypeId: dto.visitTypeId ?? null,
         patientFirstName: dto.patientFirstName,
         patientLastName: dto.patientLastName,
         patientNationalId: dto.patientNationalId,
@@ -219,7 +220,13 @@ export class SchedulingService {
       })
       .returning()
 
-    return appointment
+    const [doctor] = await this.db
+      .select({ fullName: users.fullName })
+      .from(users)
+      .where(eq(users.id, dto.doctorId))
+      .limit(1)
+
+    return { appointment, doctorName: doctor?.fullName ?? '' }
   }
 
   async getDoctorAppointments(doctorId: string, date?: string) {
@@ -230,8 +237,25 @@ export class SchedulingService {
     }
 
     return this.db
-      .select()
+      .select({
+        id: appointments.id,
+        doctorId: appointments.doctorId,
+        appointmentDate: appointments.appointmentDate,
+        startTime: appointments.startTime,
+        endTime: appointments.endTime,
+        status: appointments.status,
+        visitTypeId: appointments.visitTypeId,
+        visitTypeName: doctorVisitTypes.name,
+        visitTypeColor: doctorVisitTypes.color,
+        patientFirstName: appointments.patientFirstName,
+        patientLastName: appointments.patientLastName,
+        patientNationalId: appointments.patientNationalId,
+        patientPhone: appointments.patientPhone,
+        createdAt: appointments.createdAt,
+        updatedAt: appointments.updatedAt,
+      })
       .from(appointments)
+      .leftJoin(doctorVisitTypes, eq(appointments.visitTypeId, doctorVisitTypes.id))
       .where(and(...conditions))
       .orderBy(appointments.appointmentDate, appointments.startTime)
   }

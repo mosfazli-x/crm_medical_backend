@@ -9,11 +9,11 @@ import {
   pregnancies,
   attachments,
 } from '../../db/schema'
-import { eq, and, notInArray, desc, sql } from 'drizzle-orm'
+import { eq, and, or, notInArray, desc, sql, ilike } from 'drizzle-orm'
 import { NotFoundError, ConflictError } from '../../shared/errors'
 import { getInsuranceInfo } from '../../shared/constants/insurance'
 import { fileService } from '../../shared/services'
-import type { CreatePatientDto, UpdatePatientDto } from './patients.schema'
+import type { CreatePatientDto, UpdatePatientDto, SearchPatientsDto } from './patients.schema'
 
 export class PatientService {
   constructor(private db: DB) {}
@@ -32,6 +32,11 @@ export class PatientService {
           phone: dto.patient.phone || null,
           address: dto.patient.address || null,
           maritalStatus: dto.patient.marital_status || null,
+          smoking: dto.patient.smoking || null,
+          bmi: dto.patient.bmi ? String(dto.patient.bmi) : null,
+          exercise: dto.patient.exercise || null,
+          alcohol: dto.patient.alcohol || null,
+          confidentialNotes: dto.patient.confidential_notes || null,
         })
         .returning()
 
@@ -130,6 +135,53 @@ export class PatientService {
       .orderBy(desc(patients.createdAt))
   }
 
+  async search(dto: SearchPatientsDto) {
+    const filters: any[] = [eq(patients.isDeleted, false)]
+
+    if (dto.q) {
+      const pattern = `%${dto.q}%`
+      filters.push(
+        or(
+          ilike(patients.firstName, pattern),
+          ilike(patients.lastName, pattern),
+          ilike(patients.phone, pattern),
+          ilike(patients.nationalId, pattern),
+        )
+      )
+    } else {
+      if (dto.first_name) {
+        filters.push(ilike(patients.firstName, `%${dto.first_name}%`))
+      }
+      if (dto.last_name) {
+        filters.push(ilike(patients.lastName, `%${dto.last_name}%`))
+      }
+      if (dto.phone) {
+        filters.push(ilike(patients.phone, `%${dto.phone}%`))
+      }
+      if (dto.national_id) {
+        filters.push(ilike(patients.nationalId, `%${dto.national_id}%`))
+      }
+    }
+
+    return this.db
+      .select({
+        id: patients.id,
+        firstName: patients.firstName,
+        lastName: patients.lastName,
+        nationalId: patients.nationalId,
+        phone: patients.phone,
+        birthDate: patients.birthDate,
+        insuranceCode: patients.insuranceCode,
+        insuranceType: patients.insuranceType,
+        maritalStatus: patients.maritalStatus,
+        createdAt: patients.createdAt,
+      })
+      .from(patients)
+      .where(and(...filters))
+      .orderBy(desc(patients.createdAt))
+      .limit(50)
+  }
+
   async findById(id: string) {
     const patientData = await this.db.transaction(async (tx) => {
       const [patient] = await tx
@@ -144,6 +196,11 @@ export class PatientService {
           phone: patients.phone,
           address: patients.address,
           maritalStatus: patients.maritalStatus,
+          smoking: patients.smoking,
+          bmi: patients.bmi,
+          exercise: patients.exercise,
+          alcohol: patients.alcohol,
+          confidentialNotes: patients.confidentialNotes,
         })
         .from(patients)
         .where(eq(patients.id, id))
@@ -218,6 +275,11 @@ export class PatientService {
           ...(p.phone !== undefined && { phone: p.phone ?? null }),
           ...(p.address !== undefined && { address: p.address ?? null }),
           ...(p.marital_status !== undefined && { maritalStatus: p.marital_status ?? null }),
+          ...(p.smoking !== undefined && { smoking: p.smoking ?? null }),
+          ...(p.bmi !== undefined && { bmi: p.bmi ? String(p.bmi) : null }),
+          ...(p.exercise !== undefined && { exercise: p.exercise ?? null }),
+          ...(p.alcohol !== undefined && { alcohol: p.alcohol ?? null }),
+          ...(p.confidential_notes !== undefined && { confidentialNotes: p.confidential_notes ?? null }),
           updatedAt: new Date(),
         })
         .where(eq(patients.id, patientId))
