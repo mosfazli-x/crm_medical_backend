@@ -5,6 +5,7 @@ import {
   UpdateAvailabilitySchema,
   BookAppointmentSchema,
   UpdateAppointmentStatusSchema,
+  SendAppointmentSmsSchema,
 } from './scheduling.schema'
 import { smsService } from '../../shared/services'
 
@@ -103,7 +104,34 @@ export class SchedulingController {
     const { id } = request.params
     const doctorId = request.user.id
     const dto = UpdateAppointmentStatusSchema.parse(request.body)
-    const data = await this.schedulingService.updateAppointmentStatus(id, doctorId, dto)
-    return reply.status(200).send({ success: true, message: 'Appointment status updated successfully', data })
+    const { appointment, doctorName } = await this.schedulingService.updateAppointmentStatus(id, doctorId, dto)
+
+    if (appointment.patientPhone && (dto.status === 'confirmed' || dto.status === 'rejected')) {
+      const message =
+        dto.status === 'confirmed'
+          ? `نوبت شما در تاریخ ${appointment.appointmentDate} ساعت ${appointment.startTime} با دکتر ${doctorName} تایید شد.`
+          : `نوبت شما در تاریخ ${appointment.appointmentDate} ساعت ${appointment.startTime} با دکتر ${doctorName} رد شد.`
+      smsService.send(appointment.patientPhone, message)
+    }
+
+    return reply.status(200).send({ success: true, message: 'Appointment status updated successfully', data: appointment })
+  }
+
+  async sendAppointmentSms(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = request.params
+    const doctorId = request.user.id
+    const dto = SendAppointmentSmsSchema.parse(request.body)
+    const info = await this.schedulingService.sendAppointmentSms(id, doctorId, dto)
+
+    await smsService.send(info.patientPhone, info.text)
+
+    return reply.status(200).send({
+      success: true,
+      message: 'SMS sent successfully',
+      data: { phone: info.patientPhone },
+    })
   }
 }

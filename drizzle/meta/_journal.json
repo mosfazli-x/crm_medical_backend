@@ -78,6 +78,20 @@
       "when": 1781859350035,
       "tag": "0010_brown_old_lace",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782000000000,
+      "tag": "0011_shiny_otp",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782282700829,
+      "tag": "0012_fine_lethal_legion",
+      "breakpoints": true
     }
   ]
 }

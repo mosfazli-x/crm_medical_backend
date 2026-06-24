@@ -2,7 +2,7 @@ import type { DB } from '../../db/client'
 import { users, doctorAvailability, appointments, doctorVisitTypes } from '../../db/schema'
 import { and, eq, sql } from 'drizzle-orm'
 import { NotFoundError, ConflictError } from '../../shared/errors'
-import type { CreateAvailabilityDto, UpdateAvailabilityDto, BookAppointmentDto, UpdateAppointmentStatusDto } from './scheduling.schema'
+import type { CreateAvailabilityDto, UpdateAvailabilityDto, BookAppointmentDto, UpdateAppointmentStatusDto, SendAppointmentSmsDto } from './scheduling.schema'
 
 export class SchedulingService {
   constructor(private db: DB) {}
@@ -275,6 +275,40 @@ export class SchedulingService {
       .where(eq(appointments.id, id))
       .returning()
 
-    return updated
+    const [doctor] = await this.db
+      .select({ fullName: users.fullName })
+      .from(users)
+      .where(eq(users.id, doctorId))
+      .limit(1)
+
+    return { appointment: updated, doctorName: doctor?.fullName ?? '' }
+  }
+
+  async sendAppointmentSms(id: string, doctorId: string, dto: SendAppointmentSmsDto) {
+    const [existing] = await this.db
+      .select()
+      .from(appointments)
+      .where(and(eq(appointments.id, id), eq(appointments.doctorId, doctorId)))
+      .limit(1)
+
+    if (!existing) throw new NotFoundError('Appointment')
+
+    if (!existing.patientPhone) {
+      throw new ConflictError('Patient has no phone number')
+    }
+
+    const [doctor] = await this.db
+      .select({ fullName: users.fullName })
+      .from(users)
+      .where(eq(users.id, doctorId))
+      .limit(1)
+
+    return {
+      patientPhone: existing.patientPhone,
+      patientFirstName: existing.patientFirstName,
+      patientLastName: existing.patientLastName,
+      doctorName: doctor?.fullName ?? '',
+      text: dto.text,
+    }
   }
 }

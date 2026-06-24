@@ -184,6 +184,17 @@ export const users = pgTable('users', {
     };
 });
 
+export const otpCodes = pgTable('otp_codes', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    phone: varchar('phone', { length: 20 }).notNull(),
+    code: varchar('code', { length: 5 }).notNull(),
+    type: varchar('type', { length: 50 }).default('password_reset').notNull(),
+    expiresAt: timestamp('expires_at').notNull(),
+    usedAt: timestamp('used_at'),
+    attempts: integer('attempts').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 export const attachments = pgTable('attachments', {
     id: uuid('id').defaultRandom().primaryKey(),
     patientId: uuid('patient_id')

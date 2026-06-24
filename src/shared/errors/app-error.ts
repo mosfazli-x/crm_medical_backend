@@ -43,3 +43,9 @@ export class ValidationError extends AppError {
     this.details = details
   }
 }
+
+export class TooManyRequestsError extends AppError {
+  constructor(message = 'Too many requests. Please try again later.') {
+    super(message, 429)
+  }
+}

@@ -1,6 +1,6 @@
 import type { DB } from '../../db/client'
 import { users, patients } from '../../db/schema'
-import { eq, and, notInArray, desc } from 'drizzle-orm'
+import { eq, and, notInArray, desc, inArray } from 'drizzle-orm'
 import { NotFoundError, ConflictError } from '../../shared/errors'
 import type { ApprovePatientDto } from './users.schema'
 
@@ -133,7 +133,7 @@ export class UserService {
           requiresPasswordChange: false,
           updatedAt: new Date(),
         })
-        .where(and(eq(users.id, id), eq(users.role, 'patient'), eq(users.status, 'pending')))
+        .where(and(eq(users.id, id), eq(users.role, 'patient'), inArray(users.status, ['pending', 'approved'])))
         .returning({ id: users.id, fullName: users.fullName, status: users.status, patientId: users.patientId })
 
       if (!updatedUser) throw new ConflictError('User is not a patient or already approved')

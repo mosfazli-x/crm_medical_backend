@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { AuthService } from './auth.service'
-import { LoginSchema, RegisterSchema } from './auth.schema'
+import { LoginSchema, RegisterSchema, ForgotPasswordSchema, ResetPasswordSchema, UpdateProfileSchema, ChangePasswordSchema } from './auth.schema'
 import type { JwtPayload } from '../../shared/types'
 import { env } from '../../config/env'
 
@@ -66,6 +66,51 @@ export class AuthController {
     return reply.send({
       success: true,
       user,
+    })
+  }
+
+  async forgotPassword(request: FastifyRequest, reply: FastifyReply) {
+    const dto = ForgotPasswordSchema.parse(request.body)
+
+    await this.authService.requestOtp(dto)
+
+    return reply.send({
+      success: true,
+      message: 'در صورت وجود حساب، کد تایید ارسال شد.',
+    })
+  }
+
+  async resetPassword(request: FastifyRequest, reply: FastifyReply) {
+    const dto = ResetPasswordSchema.parse(request.body)
+
+    await this.authService.resetPassword(dto)
+
+    return reply.send({
+      success: true,
+      message: 'رمز عبور با موفقیت تغییر یافت.',
+    })
+  }
+
+  async updateProfile(request: FastifyRequest, reply: FastifyReply) {
+    const dto = UpdateProfileSchema.parse(request.body)
+
+    const user = await this.authService.updateProfile(request.user.id, dto)
+
+    return reply.send({
+      success: true,
+      message: 'پروفایل با موفقیت به‌روزرسانی شد.',
+      user,
+    })
+  }
+
+  async changePassword(request: FastifyRequest, reply: FastifyReply) {
+    const dto = ChangePasswordSchema.parse(request.body)
+
+    await this.authService.changePassword(request.user.id, dto)
+
+    return reply.send({
+      success: true,
+      message: 'رمز عبور با موفقیت تغییر یافت.',
     })
   }
 }

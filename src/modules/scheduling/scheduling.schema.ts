@@ -45,7 +45,12 @@ export const UpdateAppointmentStatusSchema = z.object({
   status: z.enum(['pending', 'confirmed', 'rejected', 'cancelled', 'completed']),
 })
 
+export const SendAppointmentSmsSchema = z.object({
+  text: z.string().min(1, 'Message text is required').max(500, 'Message text is too long'),
+})
+
 export type CreateAvailabilityDto = z.infer<typeof CreateAvailabilitySchema>
 export type UpdateAvailabilityDto = z.infer<typeof UpdateAvailabilitySchema>
 export type BookAppointmentDto = z.infer<typeof BookAppointmentSchema>
 export type UpdateAppointmentStatusDto = z.infer<typeof UpdateAppointmentStatusSchema>
+export type SendAppointmentSmsDto = z.infer<typeof SendAppointmentSmsSchema>

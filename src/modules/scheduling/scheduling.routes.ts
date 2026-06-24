@@ -24,4 +24,6 @@ export async function schedulingRoutes(fastify: FastifyInstance) {
   fastify.get<{ Querystring: { date?: string } }>('/appointments', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.getDoctorAppointments(req, rep))
 
   fastify.put<{ Params: { id: string } }>('/appointments/:id/status', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.updateAppointmentStatus(req, rep))
+
+  fastify.post<{ Params: { id: string } }>('/appointments/:id/send-sms', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.sendAppointmentSms(req, rep))
 }
