@@ -21,10 +21,10 @@ describe('Auth API', () => {
       expect(status).toBe(201)
       expect(body.success).toBe(true)
       expect(body.token).toBeDefined()
-      expect(body.token.length).toBeGreaterThan(0)
+      expect(body.token!.length).toBeGreaterThan(0)
       expect(body.user.phone).toBe(testUser.phone)
       expect(body.user.role).toBe('patient')
-      patientToken = body.token
+      patientToken = body.token!
     })
 
     it('should reject duplicate phone registration', async () => {

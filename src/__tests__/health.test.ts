@@ -5,8 +5,8 @@ describe('Health & Public Endpoints', () => {
   it('GET /health should return ok status', async () => {
     const { status, body } = await api.get('/health')
     expect(status).toBe(200)
-    expect(body.status).toBe('ok')
-    expect(body.timestamp).toBeDefined()
+    expect((body as any).status).toBe('ok')
+    expect((body as any).timestamp).toBeDefined()
   })
 
   it('GET /api/insurance-types should return insurance types', async () => {
