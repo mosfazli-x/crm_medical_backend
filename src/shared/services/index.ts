@@ -1,3 +1,5 @@
 export { smsService, SmsService } from './sms.service'
 export { fileService, FileService } from './file.service'
 export { AuditService } from './audit.service'
+export { telegramService, TelegramService } from './telegram.service'
+export { notificationService, NotificationService } from './notification.service'

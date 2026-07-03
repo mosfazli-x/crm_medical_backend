@@ -117,6 +117,7 @@ export class ScreeningService {
         performedDate: dto.performed_date,
         result: dto.result || null,
         resultDetails: dto.result_details || null,
+        labResultId: dto.lab_result_id || null,
         facilityName: dto.facility_name || null,
         notes: dto.notes || null,
         nextDueDate: dto.next_due_date || null,

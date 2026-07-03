@@ -93,8 +93,14 @@ export class AuthService {
       if (
         error &&
         typeof error === 'object' &&
-        'code' in error &&
-        (error as Record<string, unknown>).code === '23505'
+        (
+          ('code' in error && (error as Record<string, unknown>).code === '23505') ||
+          ('cause' in error &&
+            (error as { cause: Record<string, unknown> }).cause &&
+            typeof (error as { cause: Record<string, unknown> }).cause === 'object' &&
+            'code' in (error as { cause: Record<string, unknown> }).cause &&
+            (error as { cause: Record<string, unknown> }).cause.code === '23505')
+        )
       ) {
         throw new ConflictError('Phone number already registered')
       }

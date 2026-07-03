@@ -15,6 +15,10 @@ const envSchema = z.object({
   SMS_PASSWORD: z.string().optional(),
   SMS_LINE: z.string().optional(),
   SMS_API_BASE_URL: z.string().url().default('https://api.sms.ir/v1/send'),
+
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_WEBHOOK_URL: z.string().optional(),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)

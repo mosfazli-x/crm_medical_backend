@@ -1,8 +1,32 @@
+import type { DB } from '../../db/client'
+import { clinicalAssessments } from '../../db/schema'
+import { eq, desc, and } from 'drizzle-orm'
 import type { PcosRotterdamDto, MenopauseScoringDto, BishopScoreDto, BreastCancerRiskDto } from './clinical.schema'
 
 export class ClinicalService {
+  constructor(private db?: DB) {}
 
-  assessPcosRotterdam(criteria: PcosRotterdamDto) {
+  private async persistAssessment(patientId: string, assessmentType: string, result: unknown) {
+    if (!this.db) return
+    await this.db.insert(clinicalAssessments).values({
+      patientId,
+      assessmentType,
+      result: result as Record<string, unknown>,
+    })
+  }
+
+  async getAssessmentHistory(patientId: string, assessmentType?: string) {
+    if (!this.db) return []
+    const conditions = [eq(clinicalAssessments.patientId, patientId)]
+    if (assessmentType) conditions.push(eq(clinicalAssessments.assessmentType, assessmentType))
+    return this.db
+      .select()
+      .from(clinicalAssessments)
+      .where(and(...conditions))
+      .orderBy(desc(clinicalAssessments.createdAt))
+  }
+
+  async assessPcosRotterdam(criteria: PcosRotterdamDto) {
     const criterion1 = criteria.oligo_anovulation
     const criterion2 = criteria.clinical_hyperandrogenism || criteria.biochemical_hyperandrogenism
     const criterion3 = criteria.polycystic_ovaries_us
@@ -19,7 +43,7 @@ export class ClinicalService {
 
     const exclusionsChecked = criteria.excluded_cah || criteria.excluded_cushing || criteria.excluded_tumor
 
-    return {
+    const result = {
       diagnosis: criteriaMet >= 2 ? 'PCOS detected' : 'PCOS not detected',
       criteria_met: criteriaMet,
       criteria_required: 2,
@@ -72,9 +96,15 @@ export class ClinicalService {
         ? `Meets Rotterdam diagnostic criteria for PCOS (Phenotype ${phenotype || 'unclassified'}). Consider: metabolic screening (OGTT, lipid panel), endocrine workup, and management based on patient goals (fertility, symptom management, long-term health).`
         : 'Does not meet Rotterdam criteria. Consider alternative diagnoses (hypothalamic amenorrhea, thyroid dysfunction, hyperprolactinemia, premature ovarian insufficiency).',
     }
+
+    if (criteria.patient_id) {
+      await this.persistAssessment(criteria.patient_id, 'pcos_rotterdam', result)
+    }
+
+    return result
   }
 
-  calculateMenopauseScore(scores: MenopauseScoringDto) {
+  async calculateMenopauseScore(scores: MenopauseScoringDto) {
     const items = [
       { name: 'Hot flushes', value: scores.hot_flushes },
       { name: 'Night sweats', value: scores.night_sweats },
@@ -96,7 +126,7 @@ export class ClinicalService {
     else if (total <= 20) severity = 'Moderate'
     else severity = 'Severe'
 
-    return {
+    const result = {
       items,
       total_score: total,
       max_score: maxScore,
@@ -107,9 +137,15 @@ export class ClinicalService {
         ? 'Monitor symptoms; consider lifestyle modifications and non-hormonal therapies.'
         : 'Symptoms are mild. Continue routine monitoring.',
     }
+
+    if (scores.patient_id) {
+      await this.persistAssessment(scores.patient_id, 'menopause_score', result)
+    }
+
+    return result
   }
 
-  calculateBishopScore(params: BishopScoreDto) {
+  async calculateBishopScore(params: BishopScoreDto) {
     let dilationScore: number
     if (params.cervical_dilation_cm === 0) dilationScore = 0
     else if (params.cervical_dilation_cm <= 2) dilationScore = 1
@@ -136,7 +172,7 @@ export class ClinicalService {
 
     const total = dilationScore + effacementScore + consistencyScore + positionScore + stationScore
 
-    return {
+    const result = {
       components: {
         dilation: { value: params.cervical_dilation_cm, score: dilationScore },
         effacement: { value: params.cervical_effacement_percent, score: effacementScore },
@@ -152,9 +188,15 @@ export class ClinicalService {
         ? 'Consider cervical ripening agents if induction planned.'
         : 'Cervix is unfavorable. Cervical ripening recommended before induction.',
     }
+
+    if (params.patient_id) {
+      await this.persistAssessment(params.patient_id, 'bishop_score', result)
+    }
+
+    return result
   }
 
-  assessBreastCancerRisk(params: BreastCancerRiskDto) {
+  async assessBreastCancerRisk(params: BreastCancerRiskDto) {
     const riskFactors: string[] = []
     let riskPoints = 0
 
@@ -175,7 +217,7 @@ export class ClinicalService {
     else if (riskPoints >= 3) riskCategory = 'Moderate'
     else riskCategory = 'Average'
 
-    return {
+    const result = {
       total_risk_factors: riskFactors.length,
       risk_factors: riskFactors,
       risk_points: riskPoints,
@@ -186,5 +228,11 @@ export class ClinicalService {
         ? 'Annual mammography from age 40. Consider risk-reducing lifestyle modifications.'
         : 'Follow age-appropriate standard screening guidelines.',
     }
+
+    if (params.patient_id) {
+      await this.persistAssessment(params.patient_id, 'breast_cancer_risk', result)
+    }
+
+    return result
   }
 }

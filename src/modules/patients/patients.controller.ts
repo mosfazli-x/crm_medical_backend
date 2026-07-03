@@ -18,14 +18,13 @@ export class PatientController {
 
     try {
       const rawPatient = fields.patient ? JSON.parse(fields.patient as string) : null
-      const rawVisit = fields.visit ? JSON.parse(fields.visit as string) : null
 
-      if (!rawPatient || !rawVisit) {
+      if (!rawPatient) {
         await cleanupFiles(uploadDir, uploadedFiles)
-        return reply.status(400).send({ success: false, error: 'Patient and visit data are required' })
+        return reply.status(400).send({ success: false, error: 'Patient data is required' })
       }
 
-      const dto = CreatePatientSchema.parse({ patient: rawPatient, visit: rawVisit })
+      const dto = CreatePatientSchema.parse({ patient: rawPatient })
       const newPatient = await this.patientService.create(dto, uploadedFiles)
 
       if (newPatient.phone) {
@@ -75,7 +74,6 @@ export class PatientController {
 
     try {
       const rawPatient = fields.patient ? JSON.parse(fields.patient as string) : null
-      const rawPregnancy = fields.pregnancy ? JSON.parse(fields.pregnancy as string) : null
 
       if (!rawPatient) {
         await cleanupFiles(uploadDir, uploadedFiles)
@@ -84,7 +82,6 @@ export class PatientController {
 
       const dto = UpdatePatientSchema.parse({
         patient: rawPatient,
-        pregnancy: rawPregnancy,
       })
 
       const result = await this.patientService.update(patientId, dto, uploadedFiles)

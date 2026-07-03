@@ -52,7 +52,7 @@ export const allergies = pgTable('allergies', {
 export const visits = pgTable('visits', {
     id: uuid('id').primaryKey().defaultRandom(),
     patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
-    doctorId: uuid('doctor_id'),
+    doctorId: uuid('doctor_id').references(() => users.id),
 
     visitType: varchar('visit_type', { length: 50 }),
     visitReason: varchar('visit_reason', { length: 255 }),
@@ -65,7 +65,11 @@ export const visits = pgTable('visits', {
 
     nextVisitDate: timestamp('next_visit_date'),
     createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => ({
+    patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_visits_patient ON visits(patient_id)`,
+    doctorIdx: sql`CREATE INDEX IF NOT EXISTS idx_visits_doctor ON visits(doctor_id)`,
+    visitDateIdx: sql`CREATE INDEX IF NOT EXISTS idx_visits_date ON visits(visit_date)`,
+}));
 
 export const pregnancies = pgTable('pregnancies', {
     id: uuid('id').defaultRandom().primaryKey(),
@@ -86,7 +90,10 @@ export const pregnancies = pgTable('pregnancies', {
     notes: text('notes'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (table) => ({
+    patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_pregnancies_patient ON pregnancies(patient_id)`,
+    statusIdx: sql`CREATE INDEX IF NOT EXISTS idx_pregnancies_status ON pregnancies(status)`,
+}));
 
 export const gynecologicalSurgeries = pgTable('gynecological_surgeries', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -232,6 +239,7 @@ export const doctorVisitTypes = pgTable('doctor_visit_types', {
 
 export const appointments = pgTable('appointments', {
     id: uuid('id').primaryKey().defaultRandom(),
+    patientId: uuid('patient_id').references(() => patients.id, { onDelete: 'set null' }),
     doctorId: uuid('doctor_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     appointmentDate: date('appointment_date').notNull(),
     startTime: varchar('start_time', { length: 5 }).notNull(),
@@ -283,7 +291,11 @@ export const screeningSchedules = pgTable('screening_schedules', {
     notes: text('notes'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_scr_sched_patient ON screening_schedules(patient_id)`,
+    dueDateIdx: sql`CREATE INDEX IF NOT EXISTS idx_scr_sched_due_date ON screening_schedules(due_date)`,
+    statusIdx: sql`CREATE INDEX IF NOT EXISTS idx_scr_sched_status ON screening_schedules(status)`,
+}))
 
 export const screeningResults = pgTable('screening_results', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -292,16 +304,38 @@ export const screeningResults = pgTable('screening_results', {
     performedDate: date('performed_date').notNull(),
     result: varchar('result', { length: 100 }),
     resultDetails: jsonb('result_details'),
+    labResultId: uuid('lab_result_id').references(() => labResults.id, { onDelete: 'set null' }),
     providerId: uuid('provider_id').references(() => users.id),
     facilityName: varchar('facility_name', { length: 200 }),
     notes: text('notes'),
     nextDueDate: date('next_due_date'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_scr_results_patient ON screening_results(patient_id)`,
+    screeningTypeIdx: sql`CREATE INDEX IF NOT EXISTS idx_scr_results_type ON screening_results(screening_type)`,
+    performedDateIdx: sql`CREATE INDEX IF NOT EXISTS idx_scr_results_date ON screening_results(performed_date)`,
+}))
+
+export const labOrders = pgTable('lab_orders', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+    visitId: uuid('visit_id').references(() => visits.id, { onDelete: 'set null' }),
+    doctorId: uuid('doctor_id').references(() => users.id),
+    orderDate: timestamp('order_date').defaultNow().notNull(),
+    status: varchar('status', { length: 30 }).default('pending').notNull(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_lab_orders_patient ON lab_orders(patient_id)`,
+    doctorIdx: sql`CREATE INDEX IF NOT EXISTS idx_lab_orders_doctor ON lab_orders(doctor_id)`,
+    statusIdx: sql`CREATE INDEX IF NOT EXISTS idx_lab_orders_status ON lab_orders(status)`,
+}))
 
 export const labResults = pgTable('lab_results', {
     id: uuid('id').primaryKey().defaultRandom(),
     patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+    labOrderId: uuid('lab_order_id').references(() => labOrders.id, { onDelete: 'set null' }),
     category: varchar('category', { length: 50 }).notNull(),
     testName: varchar('test_name', { length: 200 }).notNull(),
     testCode: varchar('test_code', { length: 50 }),
@@ -312,9 +346,17 @@ export const labResults = pgTable('lab_results', {
     isAbnormal: boolean('is_abnormal'),
     performedDate: timestamp('performed_date').notNull(),
     performedBy: varchar('performed_by', { length: 200 }),
+    validatedById: uuid('validated_by_id').references(() => users.id),
+    validatedAt: timestamp('validated_at'),
     notes: text('notes'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+    patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_lab_results_patient ON lab_results(patient_id)`,
+    categoryIdx: sql`CREATE INDEX IF NOT EXISTS idx_lab_results_category ON lab_results(category)`,
+    testNameIdx: sql`CREATE INDEX IF NOT EXISTS idx_lab_results_test_name ON lab_results(test_name)`,
+    performedDateIdx: sql`CREATE INDEX IF NOT EXISTS idx_lab_results_performed_date ON lab_results(performed_date)`,
+    labOrderIdx: sql`CREATE INDEX IF NOT EXISTS idx_lab_results_lab_order ON lab_results(lab_order_id)`,
+}))
 
 export const procedureCodes = pgTable('procedure_codes', {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -412,6 +454,41 @@ export const postpartumCarePlans = pgTable('postpartum_care_plans', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+export const vitalSigns = pgTable('vital_signs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+  visitId: uuid('visit_id').references(() => visits.id, { onDelete: 'set null' }),
+  recordedAt: timestamp('recorded_at').defaultNow().notNull(),
+  bloodPressureSystolic: integer('blood_pressure_systolic'),
+  bloodPressureDiastolic: integer('blood_pressure_diastolic'),
+  heartRate: integer('heart_rate'),
+  respiratoryRate: integer('respiratory_rate'),
+  temperatureCelsius: decimal('temperature_celsius', { precision: 4, scale: 1 }),
+  oxygenSaturation: integer('oxygen_saturation'),
+  weightKg: decimal('weight_kg', { precision: 5, scale: 1 }),
+  heightCm: decimal('height_cm', { precision: 5, scale: 1 }),
+  bmi: decimal('bmi', { precision: 5, scale: 2 }),
+  painScore: integer('pain_score'),
+  notes: text('notes'),
+  recordedById: uuid('recorded_by_id').references(() => users.id),
+}, (table) => ({
+  patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_vital_signs_patient ON vital_signs(patient_id)`,
+  recordedAtIdx: sql`CREATE INDEX IF NOT EXISTS idx_vital_signs_recorded_at ON vital_signs(recorded_at)`,
+}))
+
+export const clinicalAssessments = pgTable('clinical_assessments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+  assessmentType: varchar('assessment_type', { length: 50 }).notNull(),
+  result: jsonb('result').notNull(),
+  providerId: uuid('provider_id').references(() => users.id),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_clinical_assessments_patient ON clinical_assessments(patient_id)`,
+  typeIdx: sql`CREATE INDEX IF NOT EXISTS idx_clinical_assessments_type ON clinical_assessments(assessment_type)`,
+}))
+
 export const messages = pgTable('messages', {
     id: uuid('id').primaryKey().defaultRandom(),
     senderId: uuid('sender_id').notNull().references(() => users.id),
@@ -426,6 +503,27 @@ export const messages = pgTable('messages', {
     isConfidential: boolean('is_confidential').default(false),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const telegramLinks = pgTable('telegram_links', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  chatId: varchar('chat_id', { length: 50 }).notNull().unique(),
+  username: varchar('username', { length: 255 }),
+  firstName: varchar('first_name', { length: 255 }),
+  lastName: varchar('last_name', { length: 255 }),
+  isActive: boolean('is_active').default(true),
+  linkedAt: timestamp('linked_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+export const telegramLinkCodes = pgTable('telegram_link_codes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  code: varchar('code', { length: 6 }).notNull().unique(),
+  expiresAt: timestamp('expires_at').notNull(),
+  usedAt: timestamp('used_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
 
 export const reproductiveSummary = pgTable('reproductive_summary', {
     id: uuid('id').primaryKey().defaultRandom(),

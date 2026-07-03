@@ -5,7 +5,6 @@ import {
   diseases,
   medications,
   allergies,
-  visits,
   pregnancies,
   attachments,
 } from '../../db/schema'
@@ -68,35 +67,6 @@ export class PatientService {
             severity: a.severity || '\u0645\u062A\u0648\u0633\u0637',
           }))
         )
-      }
-
-      if (dto.visit) {
-        if (dto.visit.pregnancy_records && dto.visit.pregnancy_records.length > 0) {
-          await tx.insert(pregnancies).values(
-            dto.visit.pregnancy_records.map((p) => ({
-              patientId: insertedPatient.id,
-              gravidaIndex: parseNullableInt(p.gravida_index),
-              status: p.status ?? 'completed',
-              lmp: p.lmp ?? null,
-              edd: p.edd ?? null,
-              endDate: p.end_date ?? null,
-              gestationalAgeWeeks: parseNullableInt(p.gestational_age_weeks),
-              gestationalAgeDays: parseNullableInt(p.gestational_age_days),
-              outcome: p.outcome ?? null,
-              deliveryMethod: p.delivery_method ?? null,
-              anesthesiaType: p.anesthesia_type ?? null,
-              maternalComplications: p.maternal_complications ?? [],
-              prenatalScreenings: p.prenatal_screenings ?? {},
-              newbornsDetails: p.newborns_details ?? [],
-              notes: p.notes ?? (dto.visit?.pregnancy_notes || null),
-            }))
-          )
-        } else if (dto.visit.pregnancy_notes) {
-          await tx.insert(pregnancies).values({
-            patientId: insertedPatient.id,
-            notes: dto.visit.pregnancy_notes,
-          })
-        }
       }
 
       if (uploadedFiles.length > 0) {
@@ -380,11 +350,6 @@ export class PatientService {
       return deletedPatient
     })
   }
-}
-
-function parseNullableInt(value: unknown): number | null {
-  if (value == null || value === '') return null
-  return Number(value)
 }
 
 async function syncRelated(

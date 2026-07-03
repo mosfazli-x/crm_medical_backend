@@ -1,6 +1,11 @@
 import { z } from 'zod'
 
-export const MenopauseScoringSchema = z.object({
+const BaseAssessmentSchema = z.object({
+  patient_id: z.string(),
+  notes: z.string().optional().nullable(),
+})
+
+export const MenopauseScoringSchema = BaseAssessmentSchema.extend({
   hot_flushes: z.number().int().min(0).max(4).default(0),
   night_sweats: z.number().int().min(0).max(4).default(0),
   sleep_disturbance: z.number().int().min(0).max(4).default(0),
@@ -13,7 +18,7 @@ export const MenopauseScoringSchema = z.object({
   anxiety: z.number().int().min(0).max(4).default(0),
 })
 
-export const BishopScoreSchema = z.object({
+export const BishopScoreSchema = BaseAssessmentSchema.extend({
   cervical_dilation_cm: z.number().min(0).max(10),
   cervical_effacement_percent: z.number().min(0).max(100),
   cervical_consistency: z.enum(['firm', 'medium', 'soft']),
@@ -21,7 +26,7 @@ export const BishopScoreSchema = z.object({
   fetal_station: z.number().min(-5).max(5),
 })
 
-export const BreastCancerRiskSchema = z.object({
+export const BreastCancerRiskSchema = BaseAssessmentSchema.extend({
   age: z.number().min(18).max(120),
   age_at_menarche: z.number().min(8).max(20),
   age_at_first_live_birth: z.number().min(0).max(60).optional().nullable(),
@@ -36,6 +41,7 @@ export const BreastCancerRiskSchema = z.object({
 })
 
 export const PcosRotterdamSchema = z.object({
+  patient_id: z.string(),
   oligo_anovulation: z.boolean().default(false),
   clinical_hyperandrogenism: z.boolean().default(false),
   biochemical_hyperandrogenism: z.boolean().default(false),

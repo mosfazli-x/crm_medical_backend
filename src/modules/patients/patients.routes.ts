@@ -1,11 +1,15 @@
 import type { FastifyInstance } from 'fastify'
 import { PatientController } from './patients.controller'
 import { PatientService } from './patients.service'
+import { PatientProfileController } from './patient-profile.controller'
+import { PatientProfileService } from './patient-profile.service'
 import { requireRole } from '../../shared/middleware'
 
 export async function patientRoutes(fastify: FastifyInstance) {
   const service = new PatientService(fastify.db)
   const controller = new PatientController(service)
+  const profileService = new PatientProfileService(fastify.db)
+  const profileController = new PatientProfileController(profileService)
 
   fastify.post('/register', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.create(req, rep))
 
@@ -15,7 +19,7 @@ export async function patientRoutes(fastify: FastifyInstance) {
 
   fastify.get<{ Params: { id: string } }>('/:id', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.findById(req, rep))
 
-  fastify.post<{ Params: { id: string } }>('/:id', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.update(req, rep))
+  fastify.put<{ Params: { id: string } }>('/:id', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.update(req, rep))
 
   fastify.post('/send-sms', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.sendSms(req, rep))
 
@@ -25,5 +29,11 @@ export async function patientRoutes(fastify: FastifyInstance) {
     '/:patientId/attachments/:attachmentId',
     { preHandler: requireRole('admin_doctor', 'doctor') },
     (req, rep) => controller.deleteAttachment(req, rep)
+  )
+
+  fastify.get<{ Params: { id: string } }>(
+    '/:id/profile',
+    { preHandler: requireRole('admin_doctor', 'doctor') },
+    (req, rep) => profileController.getProfile(req, rep)
   )
 }

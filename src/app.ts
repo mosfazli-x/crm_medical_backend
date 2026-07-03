@@ -70,6 +70,7 @@ export async function buildApp() {
   await app.register(pregnancyRoutes, { prefix: '/api/pregnancy' })
   await app.register(messagingRoutes, { prefix: '/api/messaging' })
   await app.register(consentRoutes, { prefix: '/api/consent' })
+  await app.register(telegramRoutes, { prefix: '/api/telegram' })
 
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 
@@ -94,3 +95,4 @@ import { pregnancyRoutes } from './modules/pregnancy'
 import { messagingRoutes } from './modules/messaging'
 import { consentRoutes } from './modules/consent'
 import { visitTypesRoutes } from './modules/visit-types'
+import { telegramRoutes } from './modules/telegram'

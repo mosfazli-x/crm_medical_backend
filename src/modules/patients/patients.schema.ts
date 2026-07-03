@@ -1,22 +1,5 @@
 import { z } from 'zod'
 
-const PregnancyRecordSchema = z.object({
-  gravida_index: z.union([z.number(), z.string()]).optional().nullable(),
-  status: z.string().optional().nullable(),
-  lmp: z.string().optional().nullable(),
-  edd: z.string().optional().nullable(),
-  end_date: z.string().optional().nullable(),
-  gestational_age_weeks: z.union([z.number(), z.string()]).optional().nullable(),
-  gestational_age_days: z.union([z.number(), z.string()]).optional().nullable(),
-  outcome: z.string().optional().nullable(),
-  delivery_method: z.string().optional().nullable(),
-  anesthesia_type: z.string().optional().nullable(),
-  maternal_complications: z.array(z.string()).optional().nullable(),
-  prenatal_screenings: z.record(z.string(), z.unknown()).optional().nullable(),
-  newborns_details: z.array(z.unknown()).optional().nullable(),
-  notes: z.string().optional().nullable(),
-})
-
 export const CreatePatientSchema = z.object({
   patient: z.object({
     first_name: z.string().min(2, 'First name must be at least 2 characters'),
@@ -45,20 +28,6 @@ export const CreatePatientSchema = z.object({
       substance: z.string().min(1),
       severity: z.enum(['\u062E\u0641\u06CC\u0641', '\u0645\u062A\u0648\u0633\u0637', '\u0634\u062F\u06CC\u062F']).optional().default('\u0645\u062A\u0648\u0633\u0637'),
     })).optional().default([]),
-  }),
-  pregnancy: z.object({
-    live: z.number().int().min(0).default(0),
-    abortion: z.number().int().min(0).default(0),
-    current: z.number().int().min(0).optional().nullable(),
-    note: z.string().optional().nullable(),
-  }).optional(),
-  visit: z.object({
-    visit_date: z.string().min(1, 'Visit date is required'),
-    visit_type: z.string().optional(),
-    reason: z.string().optional().nullable(),
-    notes: z.string().optional().nullable(),
-    pregnancy_records: z.array(PregnancyRecordSchema).optional(),
-    pregnancy_notes: z.string().optional().nullable(),
   }),
 })
 
@@ -94,10 +63,6 @@ export const UpdatePatientSchema = z.object({
       severity: z.string().optional(),
     })).optional(),
   }),
-  pregnancy: z.union([
-    PregnancyRecordSchema,
-    z.array(PregnancyRecordSchema),
-  ]).optional(),
 })
 
 export const SendSmsSchema = z.object({

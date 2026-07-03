@@ -7,7 +7,7 @@ import {
   UpdateAppointmentStatusSchema,
   SendAppointmentSmsSchema,
 } from './scheduling.schema'
-import { smsService } from '../../shared/services'
+import { notificationService, smsService } from '../../shared/services'
 
 export class SchedulingController {
   constructor(private schedulingService: SchedulingService) {}
@@ -74,10 +74,13 @@ export class SchedulingController {
     const { appointment, doctorName } = await this.schedulingService.bookAppointment(dto)
 
     if (appointment.patientPhone) {
-      smsService.send(
-        appointment.patientPhone,
-        `نوبت شما در تاریخ ${appointment.appointmentDate} ساعت ${appointment.startTime} با دکتر ${doctorName} با موفقیت ثبت شد.\nآدرس کلینیک: تهران-پاسداران، بستان ۸، ساختمان مهرب`
-      )
+      const text = `نوبت شما در تاریخ ${appointment.appointmentDate} ساعت ${appointment.startTime} با دکتر ${doctorName} با موفقیت ثبت شد.\nآدرس کلینیک: تهران-پاسداران، بستان ۸، ساختمان مهرب`
+      const patientId = appointment.patientId || undefined
+      if (patientId) {
+        notificationService.notifyByPatient(patientId, text, appointment.patientPhone)
+      } else {
+        notificationService.notifyByPhone(appointment.patientPhone, text)
+      }
     }
 
     return reply.status(201).send({
@@ -111,7 +114,12 @@ export class SchedulingController {
         dto.status === 'confirmed'
           ? `نوبت شما در تاریخ ${appointment.appointmentDate} ساعت ${appointment.startTime} با دکتر ${doctorName} تایید شد.`
           : `نوبت شما در تاریخ ${appointment.appointmentDate} ساعت ${appointment.startTime} با دکتر ${doctorName} رد شد.`
-      smsService.send(appointment.patientPhone, message)
+      const patientId = appointment.patientId || undefined
+      if (patientId) {
+        notificationService.notifyByPatient(patientId, message, appointment.patientPhone)
+      } else {
+        notificationService.notifyByPhone(appointment.patientPhone, message)
+      }
     }
 
     return reply.status(200).send({ success: true, message: 'Appointment status updated successfully', data: appointment })
@@ -126,7 +134,12 @@ export class SchedulingController {
     const dto = SendAppointmentSmsSchema.parse(request.body)
     const info = await this.schedulingService.sendAppointmentSms(id, doctorId, dto)
 
-    await smsService.send(info.patientPhone, info.text)
+    const patientId = info.patientId || undefined
+    if (patientId) {
+      notificationService.notifyByPatient(patientId, info.text, info.patientPhone)
+    } else {
+      notificationService.notifyByPhone(info.patientPhone, info.text)
+    }
 
     return reply.status(200).send({
       success: true,

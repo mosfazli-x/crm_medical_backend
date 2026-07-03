@@ -38,6 +38,7 @@ export class LabResultsService {
       .insert(labResults)
       .values({
         patientId: dto.patient_id,
+        labOrderId: dto.lab_order_id || null,
         category: dto.category,
         testName: dto.test_name,
         testCode: dto.test_code || null,

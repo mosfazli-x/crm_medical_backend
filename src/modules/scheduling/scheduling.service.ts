@@ -304,6 +304,7 @@ export class SchedulingService {
       .limit(1)
 
     return {
+      patientId: existing.patientId,
       patientPhone: existing.patientPhone,
       patientFirstName: existing.patientFirstName,
       patientLastName: existing.patientLastName,
