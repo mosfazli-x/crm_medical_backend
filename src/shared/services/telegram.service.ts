@@ -37,7 +37,6 @@ export class TelegramService {
         return false
       }
       const webhookUrl = `${env.TELEGRAM_WEBHOOK_URL.replace(/\/+$/, '')}/api/telegram/webhook`
-      console.log(webhookUrl)
       const secretToken = env.TELEGRAM_WEBHOOK_SECRET || this.generateSecret()
       await axios.post(`${api}/setWebhook`, {
         url: webhookUrl,

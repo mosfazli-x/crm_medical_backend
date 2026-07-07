@@ -18,4 +18,6 @@ export async function screeningRoutes(fastify: FastifyInstance) {
   fastify.get<{ Querystring: { patientId?: string; screeningType?: string } }>('/results', { preHandler: requireRole('admin_doctor', 'doctor') }, controller.getResults.bind(controller))
   fastify.get<{ Params: { id: string } }>('/results/:id', { preHandler: requireRole('admin_doctor', 'doctor') }, controller.getResultById.bind(controller))
   fastify.post('/results', { preHandler: requireRole('admin_doctor', 'doctor') }, controller.createResult.bind(controller))
+
+  fastify.get('/patients/search', { preHandler: requireRole('admin_doctor', 'doctor') }, controller.searchPatients.bind(controller))
 }

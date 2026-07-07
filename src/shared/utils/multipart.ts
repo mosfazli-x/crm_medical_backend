@@ -1,5 +1,4 @@
-import path from 'node:path'
-import fs from 'node:fs/promises'
+import { fileService, type FileMetadata } from '../services/file.service.js'
 
 export interface SavedFile {
   type: 'ultrasound' | 'lab' | 'prescription'
@@ -8,15 +7,25 @@ export interface SavedFile {
   savedName: string
   publicPath: string
   filePath: string
+  fileHash: string
+  fileSize: number
+  mimeType: string
+  relativePath: string
+}
+
+export interface BufferedFile {
+  type: string
+  fieldname: string
+  originalName: string
+  buffer: Buffer
 }
 
 const ALLOWED_FILE_TYPES = ['ultrasound', 'lab', 'prescription'] as const
 
-export async function saveMultipartFiles(
-  parts: AsyncIterable<unknown>,
-  uploadDir: string
-): Promise<{ files: SavedFile[]; fields: Record<string, string | string[]> }> {
-  const files: SavedFile[] = []
+export async function parseMultipart(
+  parts: AsyncIterable<unknown>
+): Promise<{ files: BufferedFile[]; fields: Record<string, string | string[]> }> {
+  const files: BufferedFile[] = []
   const fields: Record<string, string | string[]> = {}
 
   for await (const part of parts) {
@@ -31,21 +40,12 @@ export async function saveMultipartFiles(
     if (typedPart.type === 'file' && typedPart.toBuffer) {
       const fieldName = typedPart.fieldname.replace('[]', '')
       if (ALLOWED_FILE_TYPES.includes(fieldName as (typeof ALLOWED_FILE_TYPES)[number])) {
-        await fs.mkdir(uploadDir, { recursive: true })
-        const ext = path.extname(typedPart.filename || '')
-        const uniqueFilename = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}${ext}`
-        const targetPath = path.join(uploadDir, uniqueFilename)
-
         const buffer = await typedPart.toBuffer()
-        await fs.writeFile(targetPath, buffer)
-
-        const publicPath = `/uploads/${uniqueFilename}`
         files.push({
-          type: fieldName as SavedFile['type'],
+          type: fieldName,
+          fieldname: typedPart.fieldname,
           originalName: typedPart.filename || 'unknown',
-          savedName: uniqueFilename,
-          publicPath,
-          filePath: publicPath,
+          buffer,
         })
       }
     } else if (typedPart.value !== undefined) {
@@ -66,11 +66,41 @@ export async function saveMultipartFiles(
   return { files, fields }
 }
 
-export async function cleanupFiles(uploadDir: string, files: SavedFile[]) {
+export async function saveBufferedFiles(
+  bufferedFiles: BufferedFile[],
+  patientId: string
+): Promise<SavedFile[]> {
+  const saved: SavedFile[] = []
+
+  for (const bf of bufferedFiles) {
+    const metadata: FileMetadata = await fileService.savePatientFile(
+      patientId,
+      bf.type,
+      bf.originalName,
+      bf.buffer
+    )
+
+    saved.push({
+      type: bf.type as SavedFile['type'],
+      fieldname: bf.fieldname,
+      originalName: bf.originalName,
+      savedName: metadata.savedName,
+      publicPath: metadata.publicPath,
+      filePath: metadata.publicPath,
+      fileHash: metadata.fileHash,
+      fileSize: metadata.fileSize,
+      mimeType: metadata.mimeType,
+      relativePath: metadata.relativePath,
+    })
+  }
+
+  return saved
+}
+
+export async function cleanupFiles(files: SavedFile[]) {
   await Promise.all(
     files.map((f) =>
-      fs.unlink(path.join(uploadDir, f.savedName)).catch(() => {
-      })
+      fileService.deleteFile(fileService.getAbsolutePath(f.relativePath)).catch(() => {})
     )
   )
 }

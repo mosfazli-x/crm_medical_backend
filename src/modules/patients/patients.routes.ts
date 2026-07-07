@@ -3,7 +3,7 @@ import { PatientController } from './patients.controller'
 import { PatientService } from './patients.service'
 import { PatientProfileController } from './patient-profile.controller'
 import { PatientProfileService } from './patient-profile.service'
-import { requireRole } from '../../shared/middleware'
+import { authenticate, requireRole } from '../../shared/middleware'
 
 export async function patientRoutes(fastify: FastifyInstance) {
   const service = new PatientService(fastify.db)
@@ -31,9 +31,27 @@ export async function patientRoutes(fastify: FastifyInstance) {
     (req, rep) => controller.deleteAttachment(req, rep)
   )
 
+  fastify.patch(
+    '/me',
+    { preHandler: authenticate },
+    (req, rep) => controller.updateMyProfile(req, rep)
+  )
+
+  fastify.get(
+    '/doctors',
+    { preHandler: authenticate },
+    (req, rep) => controller.getDoctors(req, rep)
+  )
+
   fastify.get<{ Params: { id: string } }>(
     '/:id/profile',
     { preHandler: requireRole('admin_doctor', 'doctor') },
     (req, rep) => profileController.getProfile(req, rep)
+  )
+
+  fastify.get<{ Params: { attachmentId: string } }>(
+    '/files/:attachmentId',
+    { preHandler: authenticate },
+    (req, rep) => controller.serveFile(req, rep)
   )
 }

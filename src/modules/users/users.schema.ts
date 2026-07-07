@@ -12,3 +12,12 @@ export const ApprovePatientSchema = z.object({
 })
 
 export type ApprovePatientDto = z.infer<typeof ApprovePatientSchema>
+
+export const UpdateNotificationPrefsSchema = z.object({
+  smsEnabled: z.boolean().optional(),
+  telegramEnabled: z.boolean().optional(),
+}).refine((data) => data.smsEnabled !== undefined || data.telegramEnabled !== undefined, {
+  message: 'At least one of smsEnabled or telegramEnabled must be provided',
+})
+
+export type UpdateNotificationPrefsDto = z.infer<typeof UpdateNotificationPrefsSchema>

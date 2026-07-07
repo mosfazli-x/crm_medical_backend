@@ -170,6 +170,8 @@ export const users = pgTable('users', {
     phoneConfirmed: boolean('phone_confirmed').default(false),
     status: varchar('status', { length: 20 }).default('pending').notNull(),
     requiresPasswordChange: boolean('requires_password_change').default(true),
+    smsEnabled: boolean('sms_enabled').default(true).notNull(),
+    telegramEnabled: boolean('telegram_enabled').default(true).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => {
@@ -210,6 +212,12 @@ export const attachments = pgTable('attachments', {
     fileType: varchar('file_type', { length: 50 }).notNull(),
     fileName: text('file_name').notNull(),
     filePath: text('file_path').notNull(),
+    fileHash: varchar('file_hash', { length: 64 }).notNull().default(''),
+    fileSize: integer('file_size').notNull().default(0),
+    mimeType: varchar('mime_type', { length: 100 }).notNull().default('application/octet-stream'),
+    storagePath: text('storage_path').notNull().default(''),
+    isDeleted: boolean('is_deleted').default(false),
+    deletedAt: timestamp('deleted_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -233,6 +241,8 @@ export const doctorVisitTypes = pgTable('doctor_visit_types', {
     price: decimal('price', { precision: 12, scale: 2 }),
     color: varchar('color', { length: 7 }),
     isActive: boolean('is_active').default(true),
+    isDeleted: boolean('is_deleted').default(false),
+    deletedAt: timestamp('deleted_at'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -501,6 +511,8 @@ export const messages = pgTable('messages', {
     isRead: boolean('is_read').default(false),
     readAt: timestamp('read_at'),
     isConfidential: boolean('is_confidential').default(false),
+    deletedBySender: boolean('deleted_by_sender').default(false).notNull(),
+    deletedByReceiver: boolean('deleted_by_receiver').default(false).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

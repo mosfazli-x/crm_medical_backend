@@ -14,7 +14,8 @@ export class VisitTypesService {
       .where(
         and(
           eq(doctorVisitTypes.doctorId, doctorId),
-          eq(doctorVisitTypes.isActive, true)
+          eq(doctorVisitTypes.isActive, true),
+          eq(doctorVisitTypes.isDeleted, false)
         )
       )
       .orderBy(doctorVisitTypes.name)
@@ -24,7 +25,12 @@ export class VisitTypesService {
     const [visitType] = await this.db
       .select()
       .from(doctorVisitTypes)
-      .where(eq(doctorVisitTypes.id, id))
+      .where(
+        and(
+          eq(doctorVisitTypes.id, id),
+          eq(doctorVisitTypes.isDeleted, false)
+        )
+      )
       .limit(1)
 
     if (!visitType) throw new NotFoundError('Visit type')
@@ -52,13 +58,17 @@ export class VisitTypesService {
       .select()
       .from(doctorVisitTypes)
       .where(
-        and(eq(doctorVisitTypes.id, id), eq(doctorVisitTypes.doctorId, doctorId))
+        and(
+          eq(doctorVisitTypes.id, id),
+          eq(doctorVisitTypes.doctorId, doctorId),
+          eq(doctorVisitTypes.isDeleted, false)
+        )
       )
       .limit(1)
 
     if (!existing.length) throw new NotFoundError('Visit type')
 
-    const updates: Record<string, unknown> = {}
+    const updates: Record<string, unknown> = { updatedAt: new Date() }
     if (dto.name !== undefined) updates.name = dto.name
     if (dto.description !== undefined) updates.description = dto.description
     if (dto.durationMinutes !== undefined) updates.durationMinutes = dto.durationMinutes
@@ -76,14 +86,30 @@ export class VisitTypesService {
   }
 
   async delete(id: string, doctorId: string) {
-    const [deleted] = await this.db
-      .delete(doctorVisitTypes)
+    const existing = await this.db
+      .select()
+      .from(doctorVisitTypes)
       .where(
-        and(eq(doctorVisitTypes.id, id), eq(doctorVisitTypes.doctorId, doctorId))
+        and(
+          eq(doctorVisitTypes.id, id),
+          eq(doctorVisitTypes.doctorId, doctorId),
+          eq(doctorVisitTypes.isDeleted, false)
+        )
       )
+      .limit(1)
+
+    if (!existing.length) throw new NotFoundError('Visit type')
+
+    const [deleted] = await this.db
+      .update(doctorVisitTypes)
+      .set({
+        isDeleted: true,
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(doctorVisitTypes.id, id))
       .returning()
 
-    if (!deleted) throw new NotFoundError('Visit type')
     return deleted
   }
 }

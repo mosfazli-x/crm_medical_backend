@@ -1,8 +1,8 @@
 import type { DB } from '../../db/client'
 import { patients, screeningSchedules, screeningResults } from '../../db/schema'
-import { eq, and, desc, gte, lte, sql } from 'drizzle-orm'
+import { eq, and, or, ilike, desc, gte, lte, sql } from 'drizzle-orm'
 import { NotFoundError } from '../../shared/errors'
-import type { ScreeningScheduleDto, ScreeningResultDto } from './screening.schema'
+import type { ScreeningScheduleDto, ScreeningResultDto, SearchPatientsDto } from './screening.schema'
 
 export class ScreeningService {
   constructor(private db: DB) {}
@@ -11,8 +11,24 @@ export class ScreeningService {
     const conditions: ReturnType<typeof eq>[] = []
     if (patientId) conditions.push(eq(screeningSchedules.patientId, patientId))
     const query = this.db
-      .select()
+      .select({
+        id: screeningSchedules.id,
+        patientId: screeningSchedules.patientId,
+        screeningType: screeningSchedules.screeningType,
+        dueDate: screeningSchedules.dueDate,
+        status: screeningSchedules.status,
+        riskLevel: screeningSchedules.riskLevel,
+        assignedToId: screeningSchedules.assignedToId,
+        notes: screeningSchedules.notes,
+        createdAt: screeningSchedules.createdAt,
+        updatedAt: screeningSchedules.updatedAt,
+        patientFirstName: patients.firstName,
+        patientLastName: patients.lastName,
+        patientNationalId: patients.nationalId,
+        patientPhone: patients.phone,
+      })
       .from(screeningSchedules)
+      .leftJoin(patients, eq(screeningSchedules.patientId, patients.id))
       .orderBy(desc(screeningSchedules.dueDate))
     if (conditions.length > 0) {
       return query.where(and(...conditions))
@@ -22,8 +38,24 @@ export class ScreeningService {
 
   async getScheduleById(id: string) {
     const [schedule] = await this.db
-      .select()
+      .select({
+        id: screeningSchedules.id,
+        patientId: screeningSchedules.patientId,
+        screeningType: screeningSchedules.screeningType,
+        dueDate: screeningSchedules.dueDate,
+        status: screeningSchedules.status,
+        riskLevel: screeningSchedules.riskLevel,
+        assignedToId: screeningSchedules.assignedToId,
+        notes: screeningSchedules.notes,
+        createdAt: screeningSchedules.createdAt,
+        updatedAt: screeningSchedules.updatedAt,
+        patientFirstName: patients.firstName,
+        patientLastName: patients.lastName,
+        patientNationalId: patients.nationalId,
+        patientPhone: patients.phone,
+      })
       .from(screeningSchedules)
+      .leftJoin(patients, eq(screeningSchedules.patientId, patients.id))
       .where(eq(screeningSchedules.id, id))
       .limit(1)
     if (!schedule) throw new NotFoundError('Screening schedule')
@@ -83,8 +115,26 @@ export class ScreeningService {
     if (patientId) conditions.push(eq(screeningResults.patientId, patientId))
     if (screeningType) conditions.push(eq(screeningResults.screeningType, screeningType))
     const query = this.db
-      .select()
+      .select({
+        id: screeningResults.id,
+        patientId: screeningResults.patientId,
+        screeningType: screeningResults.screeningType,
+        performedDate: screeningResults.performedDate,
+        result: screeningResults.result,
+        resultDetails: screeningResults.resultDetails,
+        labResultId: screeningResults.labResultId,
+        providerId: screeningResults.providerId,
+        facilityName: screeningResults.facilityName,
+        notes: screeningResults.notes,
+        nextDueDate: screeningResults.nextDueDate,
+        createdAt: screeningResults.createdAt,
+        patientFirstName: patients.firstName,
+        patientLastName: patients.lastName,
+        patientNationalId: patients.nationalId,
+        patientPhone: patients.phone,
+      })
       .from(screeningResults)
+      .leftJoin(patients, eq(screeningResults.patientId, patients.id))
       .orderBy(desc(screeningResults.performedDate))
     if (conditions.length > 0) {
       return query.where(and(...conditions))
@@ -94,8 +144,26 @@ export class ScreeningService {
 
   async getResultById(id: string) {
     const [result] = await this.db
-      .select()
+      .select({
+        id: screeningResults.id,
+        patientId: screeningResults.patientId,
+        screeningType: screeningResults.screeningType,
+        performedDate: screeningResults.performedDate,
+        result: screeningResults.result,
+        resultDetails: screeningResults.resultDetails,
+        labResultId: screeningResults.labResultId,
+        providerId: screeningResults.providerId,
+        facilityName: screeningResults.facilityName,
+        notes: screeningResults.notes,
+        nextDueDate: screeningResults.nextDueDate,
+        createdAt: screeningResults.createdAt,
+        patientFirstName: patients.firstName,
+        patientLastName: patients.lastName,
+        patientNationalId: patients.nationalId,
+        patientPhone: patients.phone,
+      })
       .from(screeningResults)
+      .leftJoin(patients, eq(screeningResults.patientId, patients.id))
       .where(eq(screeningResults.id, id))
       .limit(1)
     if (!result) throw new NotFoundError('Screening result')
@@ -151,5 +219,52 @@ export class ScreeningService {
         )
       )
       .orderBy(screeningSchedules.dueDate)
+  }
+
+  async searchPatients(dto: SearchPatientsDto) {
+    const filters: any[] = [eq(patients.isDeleted, false)]
+
+    if (dto.q) {
+      const pattern = `%${dto.q}%`
+      filters.push(
+        or(
+          ilike(patients.firstName, pattern),
+          ilike(patients.lastName, pattern),
+          ilike(patients.phone, pattern),
+          ilike(patients.nationalId, pattern),
+        )
+      )
+    } else {
+      if (dto.first_name) {
+        filters.push(ilike(patients.firstName, `%${dto.first_name}%`))
+      }
+      if (dto.last_name) {
+        filters.push(ilike(patients.lastName, `%${dto.last_name}%`))
+      }
+      if (dto.phone) {
+        filters.push(ilike(patients.phone, `%${dto.phone}%`))
+      }
+      if (dto.national_id) {
+        filters.push(ilike(patients.nationalId, `%${dto.national_id}%`))
+      }
+    }
+
+    return this.db
+      .select({
+        id: patients.id,
+        firstName: patients.firstName,
+        lastName: patients.lastName,
+        nationalId: patients.nationalId,
+        phone: patients.phone,
+        birthDate: patients.birthDate,
+        insuranceCode: patients.insuranceCode,
+        insuranceType: patients.insuranceType,
+        maritalStatus: patients.maritalStatus,
+        createdAt: patients.createdAt,
+      })
+      .from(patients)
+      .where(and(...filters))
+      .orderBy(desc(patients.createdAt))
+      .limit(50)
   }
 }

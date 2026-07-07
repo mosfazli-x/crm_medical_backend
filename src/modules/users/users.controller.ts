@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { UserService } from './users.service'
-import { ApprovePatientSchema } from './users.schema'
+import { ApprovePatientSchema, UpdateNotificationPrefsSchema } from './users.schema'
 
 export class UserController {
   constructor(private userService: UserService) {}
@@ -63,6 +63,28 @@ export class UserController {
     return reply.status(200).send({
       success: true,
       message: 'Patient approved and record created',
+      data,
+    })
+  }
+
+  async findDoctors(_request: FastifyRequest, reply: FastifyReply) {
+    const data = await this.userService.findDoctors()
+    return reply.status(200).send({ success: true, data })
+  }
+
+  async getNotificationPrefs(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+    const { id } = request.params
+    const data = await this.userService.getNotificationPrefs(id)
+    return reply.status(200).send({ success: true, data })
+  }
+
+  async updateNotificationPrefs(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+    const { id } = request.params
+    const dto = UpdateNotificationPrefsSchema.parse(request.body)
+    const data = await this.userService.updateNotificationPrefs(id, dto)
+    return reply.status(200).send({
+      success: true,
+      message: 'Notification preferences updated successfully',
       data,
     })
   }

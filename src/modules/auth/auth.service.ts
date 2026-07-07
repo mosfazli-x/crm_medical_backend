@@ -2,7 +2,7 @@ import type { DB } from '../../db/client'
 import { users, otpCodes } from '../../db/schema'
 import { and, eq, gt, isNull, sql, ne } from 'drizzle-orm'
 import { ConflictError, UnauthorizedError, ForbiddenError, NotFoundError, TooManyRequestsError, ValidationError } from '../../shared/errors'
-import { smsService } from '../../shared/services'
+import { smsService, notificationService } from '../../shared/services'
 import type { LoginDto, RegisterDto, ForgotPasswordDto, ResetPasswordDto, UpdateProfileDto, ChangePasswordDto } from './auth.schema'
 import bcrypt from 'bcrypt'
 
@@ -86,7 +86,7 @@ export class AuthService {
       }
 
       const message = `سلام ${dto.fullName} عزیز، ثبت‌نام شما در کلینیک تخصصی دکتر حسینی با نقش ${roleNames[dto.role] || dto.role} با موفقیت انجام شد.`
-      smsService.send(dto.phone, message).catch(() => {})
+      notificationService.notifyByUser(newUser.id, message).catch(() => {})
 
       return newUser
     } catch (error: unknown) {
@@ -119,6 +119,8 @@ export class AuthService {
         patientId: users.patientId,
         status: users.status,
         requiresPasswordChange: users.requiresPasswordChange,
+        smsEnabled: users.smsEnabled,
+        telegramEnabled: users.telegramEnabled,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
       })
@@ -177,6 +179,8 @@ export class AuthService {
         patientId: users.patientId,
         status: users.status,
         requiresPasswordChange: users.requiresPasswordChange,
+        smsEnabled: users.smsEnabled,
+        telegramEnabled: users.telegramEnabled,
         updatedAt: users.updatedAt,
       })
 

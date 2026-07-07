@@ -1,8 +1,8 @@
 import type { DB } from '../../db/client'
 import { patients, procedureCodes, billingRecords } from '../../db/schema'
-import { eq, and, desc, sql } from 'drizzle-orm'
+import { eq, and, or, ilike, desc, sql } from 'drizzle-orm'
 import { NotFoundError } from '../../shared/errors'
-import type { ProcedureCodeDto, BillingRecordDto } from './billing.schema'
+import type { ProcedureCodeDto, BillingRecordDto, SearchPatientsDto } from './billing.schema'
 
 export class BillingService {
   constructor(private db: DB) {}
@@ -36,8 +36,28 @@ export class BillingService {
     if (patientId) conditions.push(eq(billingRecords.patientId, patientId))
     if (status) conditions.push(eq(billingRecords.status, status))
     const query = this.db
-      .select()
+      .select({
+        id: billingRecords.id,
+        patientId: billingRecords.patientId,
+        procedureCodeId: billingRecords.procedureCodeId,
+        visitId: billingRecords.visitId,
+        description: billingRecords.description,
+        amount: billingRecords.amount,
+        insuranceClaimAmount: billingRecords.insuranceClaimAmount,
+        patientPayAmount: billingRecords.patientPayAmount,
+        status: billingRecords.status,
+        billedDate: billingRecords.billedDate,
+        paidDate: billingRecords.paidDate,
+        notes: billingRecords.notes,
+        createdAt: billingRecords.createdAt,
+        updatedAt: billingRecords.updatedAt,
+        patientFirstName: patients.firstName,
+        patientLastName: patients.lastName,
+        patientNationalId: patients.nationalId,
+        patientPhone: patients.phone,
+      })
       .from(billingRecords)
+      .leftJoin(patients, eq(billingRecords.patientId, patients.id))
       .orderBy(desc(billingRecords.createdAt))
     if (conditions.length > 0) {
       return query.where(and(...conditions))
@@ -47,8 +67,28 @@ export class BillingService {
 
   async getBillingRecordById(id: string) {
     const [record] = await this.db
-      .select()
+      .select({
+        id: billingRecords.id,
+        patientId: billingRecords.patientId,
+        procedureCodeId: billingRecords.procedureCodeId,
+        visitId: billingRecords.visitId,
+        description: billingRecords.description,
+        amount: billingRecords.amount,
+        insuranceClaimAmount: billingRecords.insuranceClaimAmount,
+        patientPayAmount: billingRecords.patientPayAmount,
+        status: billingRecords.status,
+        billedDate: billingRecords.billedDate,
+        paidDate: billingRecords.paidDate,
+        notes: billingRecords.notes,
+        createdAt: billingRecords.createdAt,
+        updatedAt: billingRecords.updatedAt,
+        patientFirstName: patients.firstName,
+        patientLastName: patients.lastName,
+        patientNationalId: patients.nationalId,
+        patientPhone: patients.phone,
+      })
       .from(billingRecords)
+      .leftJoin(patients, eq(billingRecords.patientId, patients.id))
       .where(eq(billingRecords.id, id))
       .limit(1)
     if (!record) throw new NotFoundError('Billing record')
@@ -105,5 +145,52 @@ export class BillingService {
       .from(billingRecords)
       .where(eq(billingRecords.patientId, patientId))
     return result[0]
+  }
+
+  async searchPatients(dto: SearchPatientsDto) {
+    const filters: any[] = [eq(patients.isDeleted, false)]
+
+    if (dto.q) {
+      const pattern = `%${dto.q}%`
+      filters.push(
+        or(
+          ilike(patients.firstName, pattern),
+          ilike(patients.lastName, pattern),
+          ilike(patients.phone, pattern),
+          ilike(patients.nationalId, pattern),
+        )
+      )
+    } else {
+      if (dto.first_name) {
+        filters.push(ilike(patients.firstName, `%${dto.first_name}%`))
+      }
+      if (dto.last_name) {
+        filters.push(ilike(patients.lastName, `%${dto.last_name}%`))
+      }
+      if (dto.phone) {
+        filters.push(ilike(patients.phone, `%${dto.phone}%`))
+      }
+      if (dto.national_id) {
+        filters.push(ilike(patients.nationalId, `%${dto.national_id}%`))
+      }
+    }
+
+    return this.db
+      .select({
+        id: patients.id,
+        firstName: patients.firstName,
+        lastName: patients.lastName,
+        nationalId: patients.nationalId,
+        phone: patients.phone,
+        birthDate: patients.birthDate,
+        insuranceCode: patients.insuranceCode,
+        insuranceType: patients.insuranceType,
+        maritalStatus: patients.maritalStatus,
+        createdAt: patients.createdAt,
+      })
+      .from(patients)
+      .where(and(...filters))
+      .orderBy(desc(patients.createdAt))
+      .limit(50)
   }
 }

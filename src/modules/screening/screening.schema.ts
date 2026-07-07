@@ -48,5 +48,14 @@ export const CreateScreeningResultSchema = z.object({
   next_due_date: z.string().optional().nullable(),
 })
 
+export const SearchPatientsSchema = z.object({
+  q: z.string().optional(),
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  phone: z.string().optional(),
+  national_id: z.string().optional(),
+})
+
 export type ScreeningScheduleDto = z.infer<typeof ScreeningScheduleSchema>
 export type ScreeningResultDto = z.infer<typeof ScreeningResultSchema>
+export type SearchPatientsDto = z.infer<typeof SearchPatientsSchema>

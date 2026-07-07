@@ -2,7 +2,7 @@ import type { DB } from '../../db/client'
 import { users, patients } from '../../db/schema'
 import { eq, and, notInArray, desc, inArray } from 'drizzle-orm'
 import { NotFoundError, ConflictError } from '../../shared/errors'
-import type { ApprovePatientDto } from './users.schema'
+import type { ApprovePatientDto, UpdateNotificationPrefsDto } from './users.schema'
 
 export class UserService {
   constructor(private db: DB) {}
@@ -17,6 +17,8 @@ export class UserService {
         status: users.status,
         organizationName: users.organizationName,
         patientId: users.patientId,
+        smsEnabled: users.smsEnabled,
+        telegramEnabled: users.telegramEnabled,
         createdAt: users.createdAt,
       })
       .from(users)
@@ -33,6 +35,8 @@ export class UserService {
         status: users.status,
         organizationName: users.organizationName,
         patientId: users.patientId,
+        smsEnabled: users.smsEnabled,
+        telegramEnabled: users.telegramEnabled,
         createdAt: users.createdAt,
       })
       .from(users)
@@ -142,5 +146,59 @@ export class UserService {
     })
 
     return data
+  }
+
+  async findDoctors() {
+    return this.db
+      .select({
+        id: users.id,
+        fullName: users.fullName,
+        role: users.role,
+      })
+      .from(users)
+      .where(and(
+        inArray(users.role, ['doctor', 'admin_doctor']),
+        eq(users.status, 'approved'),
+      ))
+      .orderBy(users.fullName)
+  }
+
+  async getNotificationPrefs(userId: string) {
+    const [user] = await this.db
+      .select({
+        smsEnabled: users.smsEnabled,
+        telegramEnabled: users.telegramEnabled,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+
+    if (!user) throw new NotFoundError('User')
+    return user
+  }
+
+  async updateNotificationPrefs(userId: string, dto: UpdateNotificationPrefsDto) {
+    const updateData: Record<string, unknown> = { updatedAt: new Date() }
+
+    if (dto.smsEnabled !== undefined) {
+      updateData.smsEnabled = dto.smsEnabled
+    }
+
+    if (dto.telegramEnabled !== undefined) {
+      updateData.telegramEnabled = dto.telegramEnabled
+    }
+
+    const [updated] = await this.db
+      .update(users)
+      .set(updateData)
+      .where(eq(users.id, userId))
+      .returning({
+        id: users.id,
+        smsEnabled: users.smsEnabled,
+        telegramEnabled: users.telegramEnabled,
+      })
+
+    if (!updated) throw new NotFoundError('User')
+    return updated
   }
 }

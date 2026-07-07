@@ -34,5 +34,14 @@ export const CreateBillingRecordSchema = z.object({
   notes: z.string().optional().nullable(),
 })
 
+export const SearchPatientsSchema = z.object({
+  q: z.string().optional(),
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  phone: z.string().optional(),
+  national_id: z.string().optional(),
+})
+
 export type ProcedureCodeDto = z.infer<typeof ProcedureCodeSchema>
 export type BillingRecordDto = z.infer<typeof BillingRecordSchema>
+export type SearchPatientsDto = z.infer<typeof SearchPatientsSchema>

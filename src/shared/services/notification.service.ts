@@ -14,16 +14,18 @@ export class NotificationService {
     const db = this.ensureDb()
 
     const [user] = await db
-      .select({ phone: users.phone })
+      .select({ phone: users.phone, smsEnabled: users.smsEnabled, telegramEnabled: users.telegramEnabled })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1)
 
-    if (user?.phone) {
+    if (!user) return
+
+    if (user.phone && user.smsEnabled) {
       smsService.send(user.phone, text)
     }
 
-    if (telegramService.isConfigured()) {
+    if (user.telegramEnabled && telegramService.isConfigured()) {
       const [link] = await db
         .select({ chatId: telegramLinks.chatId })
         .from(telegramLinks)
@@ -40,13 +42,28 @@ export class NotificationService {
     const db = this.ensureDb()
 
     const [user] = await db
-      .select({ id: users.id, phone: users.phone })
+      .select({ id: users.id, phone: users.phone, smsEnabled: users.smsEnabled, telegramEnabled: users.telegramEnabled })
       .from(users)
       .where(eq(users.patientId, patientId))
       .limit(1)
 
     if (user) {
-      return this.notifyByUser(user.id, text)
+      if (user.phone && user.smsEnabled) {
+        smsService.send(user.phone, text)
+      }
+
+      if (user.telegramEnabled && telegramService.isConfigured()) {
+        const [link] = await db
+          .select({ chatId: telegramLinks.chatId })
+          .from(telegramLinks)
+          .where(eq(telegramLinks.userId, user.id))
+          .limit(1)
+
+        if (link) {
+          telegramService.sendMessage(link.chatId, text)
+        }
+      }
+      return
     }
 
     if (phone) {
@@ -55,6 +72,34 @@ export class NotificationService {
   }
 
   async notifyByPhone(phone: string, text: string, userId?: string): Promise<void> {
+    if (userId) {
+      const db = this.ensureDb()
+      const [user] = await db
+        .select({ smsEnabled: users.smsEnabled, telegramEnabled: users.telegramEnabled })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1)
+
+      if (user) {
+        if (user.smsEnabled) {
+          smsService.send(phone, text)
+        }
+
+        if (user.telegramEnabled && telegramService.isConfigured()) {
+          const [link] = await db
+            .select({ chatId: telegramLinks.chatId })
+            .from(telegramLinks)
+            .where(eq(telegramLinks.userId, userId))
+            .limit(1)
+
+          if (link) {
+            telegramService.sendMessage(link.chatId, text)
+          }
+        }
+        return
+      }
+    }
+
     smsService.send(phone, text)
 
     if (userId && telegramService.isConfigured()) {

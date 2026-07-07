@@ -78,7 +78,23 @@ export const SearchPatientsSchema = z.object({
   national_id: z.string().optional(),
 })
 
+export const PatientSelfUpdateSchema = z.object({
+  first_name: z.string().min(2).optional(),
+  last_name: z.string().min(2).optional(),
+  insurance_code: z.string().optional().nullable(),
+  insurance_type: z.enum(['social_security', 'health', 'armed_forces', 'relief_committee', 'iran', 'supplementary', 'other']).optional().nullable(),
+  birth_date: z.string().nullable().optional(),
+  phone: z.string().regex(/^09\d{9}$/).optional().or(z.literal('')),
+  address: z.string().optional().nullable(),
+  marital_status: z.string().optional().nullable(),
+  smoking: z.string().optional().nullable(),
+  bmi: z.number().positive().optional().nullable(),
+  exercise: z.string().optional().nullable(),
+  alcohol: z.string().optional().nullable(),
+})
+
 export type CreatePatientDto = z.infer<typeof CreatePatientSchema>
 export type UpdatePatientDto = z.infer<typeof UpdatePatientSchema>
+export type PatientSelfUpdateDto = z.infer<typeof PatientSelfUpdateSchema>
 export type SendSmsDto = z.infer<typeof SendSmsSchema>
 export type SearchPatientsDto = z.infer<typeof SearchPatientsSchema>

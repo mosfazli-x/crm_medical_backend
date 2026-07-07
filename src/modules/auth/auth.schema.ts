@@ -70,6 +70,8 @@ export interface UserProfileResponse {
   patientId: string | null
   status: string
   requiresPasswordChange: boolean
+  smsEnabled: boolean
+  telegramEnabled: boolean
   createdAt: Date
   updatedAt: Date
 }

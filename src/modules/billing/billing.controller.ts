@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { BillingService } from './billing.service'
-import { ProcedureCodeSchema, CreateBillingRecordSchema } from './billing.schema'
+import { ProcedureCodeSchema, CreateBillingRecordSchema, SearchPatientsSchema } from './billing.schema'
 import { z } from 'zod'
 
 const UpdateStatusSchema = z.object({
@@ -66,6 +66,12 @@ export class BillingController {
   ) {
     const { patientId } = request.params
     const data = await this.service.getPatientBalance(patientId)
+    return reply.send({ success: true, data })
+  }
+
+  async searchPatients(request: FastifyRequest, reply: FastifyReply) {
+    const query = SearchPatientsSchema.parse(request.query)
+    const data = await this.service.searchPatients(query)
     return reply.send({ success: true, data })
   }
 }

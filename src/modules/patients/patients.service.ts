@@ -2,22 +2,24 @@ import path from 'node:path'
 import type { DB } from '../../db/client'
 import {
   patients,
+  users,
   diseases,
   medications,
   allergies,
   pregnancies,
   attachments,
 } from '../../db/schema'
-import { eq, and, or, notInArray, desc, sql, ilike } from 'drizzle-orm'
+import { eq, and, or, notInArray, desc, sql, ilike, inArray } from 'drizzle-orm'
 import { NotFoundError, ConflictError } from '../../shared/errors'
 import { getInsuranceInfo } from '../../shared/constants/insurance'
 import { fileService } from '../../shared/services'
 import type { CreatePatientDto, UpdatePatientDto, SearchPatientsDto } from './patients.schema'
+import bcrypt from 'bcrypt'
 
 export class PatientService {
   constructor(private db: DB) {}
 
-  async create(dto: CreatePatientDto, uploadedFiles: Array<{ type: string; fieldname?: string; originalName: string; filePath: string }>) {
+  async create(dto: CreatePatientDto, uploadedFiles: Array<{ type: string; fieldname?: string; originalName: string; filePath: string; fileHash?: string; fileSize?: number; mimeType?: string; relativePath?: string }>) {
     const newPatient = await this.db.transaction(async (tx) => {
       const [insertedPatient] = await tx
         .insert(patients)
@@ -76,8 +78,26 @@ export class PatientService {
             fileType: file.type || (file.fieldname?.replace(/\[\]$/, '') ?? 'unknown'),
             fileName: file.originalName,
             filePath: file.filePath,
+            fileHash: file.fileHash ?? '',
+            fileSize: file.fileSize ?? 0,
+            mimeType: file.mimeType ?? 'application/octet-stream',
+            storagePath: file.relativePath ?? '',
           }))
         )
+      }
+
+      if (insertedPatient.phone) {
+        const passwordHash = await bcrypt.hash(insertedPatient.nationalId, 12)
+        await tx.insert(users).values({
+          phone: insertedPatient.phone,
+          passwordHash,
+          role: 'patient',
+          patientId: insertedPatient.id,
+          fullName: `${insertedPatient.firstName} ${insertedPatient.lastName}`,
+          phoneConfirmed: true,
+          status: 'approved',
+          requiresPasswordChange: true,
+        })
       }
 
       return insertedPatient
@@ -202,9 +222,13 @@ export class PatientService {
               fileType: attachments.fileType,
               fileName: attachments.fileName,
               filePath: attachments.filePath,
+              fileHash: attachments.fileHash,
+              fileSize: attachments.fileSize,
+              mimeType: attachments.mimeType,
+              createdAt: attachments.createdAt,
             })
             .from(attachments)
-            .where(eq(attachments.patientId, id)),
+            .where(and(eq(attachments.patientId, id), eq(attachments.isDeleted, false))),
         ])
 
       const groupedAttachments = {
@@ -230,7 +254,7 @@ export class PatientService {
   async update(
     patientId: string,
     dto: UpdatePatientDto,
-    uploadedFiles: Array<{ type: string; fieldname?: string; originalName: string; filePath: string }>
+    uploadedFiles: Array<{ type: string; fieldname?: string; originalName: string; filePath: string; fileHash?: string; fileSize?: number; mimeType?: string; relativePath?: string }>
   ) {
     const result = await this.db.transaction(async (tx) => {
       const p = dto.patient
@@ -303,6 +327,10 @@ export class PatientService {
             fileType: file.type || (file.fieldname?.replace(/\[\]$/, '') ?? 'unknown'),
             fileName: file.originalName,
             filePath: file.filePath,
+            fileHash: file.fileHash ?? '',
+            fileSize: file.fileSize ?? 0,
+            mimeType: file.mimeType ?? 'application/octet-stream',
+            storagePath: file.relativePath ?? '',
           }))
         )
       }
@@ -322,13 +350,72 @@ export class PatientService {
 
       if (!attachment) throw new NotFoundError('Attachment')
 
-      const filename = path.basename(attachment.filePath)
-      await fileService.deleteFile(filename)
+      if (attachment.storagePath) {
+        await fileService.moveFileToTrash(attachment.storagePath)
+      } else {
+        const filename = path.basename(attachment.filePath)
+        await fileService.deleteFile(path.join(fileService.getBaseDir(), filename))
+      }
 
       await tx.delete(attachments).where(eq(attachments.id, attachmentId))
 
       return { id: attachmentId }
     })
+  }
+
+  async getDoctors() {
+    return this.db
+      .select({
+        id: users.id,
+        fullName: users.fullName,
+        phone: users.phone,
+        role: users.role,
+      })
+      .from(users)
+      .where(
+        and(
+          inArray(users.role, ['doctor', 'admin_doctor']),
+          eq(users.status, 'approved'),
+        )
+      )
+      .orderBy(users.fullName)
+  }
+
+  async updateMyProfile(patientId: string, data: Record<string, any>) {
+    const result = await this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(patients)
+        .set({
+          ...(data.first_name !== undefined && { firstName: data.first_name }),
+          ...(data.last_name !== undefined && { lastName: data.last_name }),
+          ...(data.insurance_code !== undefined && { insuranceCode: data.insurance_code ?? null }),
+          ...(data.insurance_type !== undefined && { insuranceType: data.insurance_type ?? null }),
+          ...(data.birth_date !== undefined && { birthDate: data.birth_date ?? null }),
+          ...(data.phone !== undefined && { phone: data.phone ?? null }),
+          ...(data.address !== undefined && { address: data.address ?? null }),
+          ...(data.marital_status !== undefined && { maritalStatus: data.marital_status ?? null }),
+          ...(data.smoking !== undefined && { smoking: data.smoking ?? null }),
+          ...(data.bmi !== undefined && { bmi: data.bmi ? String(data.bmi) : null }),
+          ...(data.exercise !== undefined && { exercise: data.exercise ?? null }),
+          ...(data.alcohol !== undefined && { alcohol: data.alcohol ?? null }),
+          updatedAt: new Date(),
+        })
+        .where(eq(patients.id, patientId))
+        .returning()
+
+      if (!updated) throw new NotFoundError('Patient')
+
+      if (updated.phone) {
+        await tx
+          .update(users)
+          .set({ phone: updated.phone })
+          .where(eq(users.patientId, patientId))
+      }
+
+      return updated
+    })
+
+    return result
   }
 
   async softDelete(id: string) {

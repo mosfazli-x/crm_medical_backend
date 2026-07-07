@@ -5,7 +5,7 @@ import {
   familyHistory, reproductiveSummary, prenatalVisits, fetalMeasurements, postpartumCarePlans,
   screeningSchedules, screeningResults, labResults, consentRecords
 } from '../../db/schema'
-import { eq, desc, inArray, sql } from 'drizzle-orm'
+import { eq, and, desc, inArray, sql } from 'drizzle-orm'
 import { NotFoundError } from '../../shared/errors'
 import { getInsuranceInfo } from '../../shared/constants/insurance'
 
@@ -132,9 +132,18 @@ export class PatientProfileService {
         .orderBy(desc(consentRecords.grantedAt))
 
       const attachmentsList = await tx
-        .select()
+        .select({
+          id: attachments.id,
+          fileType: attachments.fileType,
+          fileName: attachments.fileName,
+          filePath: attachments.filePath,
+          fileHash: attachments.fileHash,
+          fileSize: attachments.fileSize,
+          mimeType: attachments.mimeType,
+          createdAt: attachments.createdAt,
+        })
         .from(attachments)
-        .where(eq(attachments.patientId, patientId))
+        .where(and(eq(attachments.patientId, patientId), eq(attachments.isDeleted, false)))
 
       const groupedAttachments = {
         ultrasound: attachmentsList.filter((f) => f.fileType === 'ultrasound'),

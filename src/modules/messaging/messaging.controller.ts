@@ -7,12 +7,17 @@ export class MessagingController {
 
   async send(request: FastifyRequest, reply: FastifyReply) {
     const dto = SendMessageSchema.parse(request.body)
-    const data = await this.service.sendMessage(request.user.id, request.user.role, dto)
+    const data = await this.service.sendMessage(
+      request.user.id,
+      request.user.role,
+      dto,
+      request.user.patientId,
+    )
     return reply.status(201).send({ success: true, data, message: 'Message sent' })
   }
 
   async inbox(request: FastifyRequest, reply: FastifyReply) {
-    const data = await this.service.getInbox(request.user.id, request.user.role)
+    const data = await this.service.getInbox(request.user.id, request.user.role, request.user.patientId)
     return reply.send({ success: true, data })
   }
 
@@ -30,17 +35,35 @@ export class MessagingController {
     return reply.send({ success: true, data })
   }
 
+  async myMessages(request: FastifyRequest, reply: FastifyReply) {
+    const { id, patientId } = request.user
+    if (!patientId) {
+      return reply.status(400).send({ success: false, error: 'No patient profile linked to your account' })
+    }
+    const data = await this.service.getMyMessages(id, patientId)
+    return reply.send({ success: true, data })
+  }
+
   async markRead(
     request: FastifyRequest<{ Params: { id: string } }>,
     reply: FastifyReply
   ) {
     const { id } = request.params
-    const data = await this.service.markAsRead(id, request.user.id)
+    const data = await this.service.markAsRead(id, request.user.id, request.user.role, request.user.patientId)
     return reply.send({ success: true, data, message: 'Message marked as read' })
   }
 
+  async deleteMessage(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = request.params
+    const data = await this.service.deleteMessage(id, request.user.id, request.user.role)
+    return reply.send({ success: true, data, message: 'Message deleted' })
+  }
+
   async unreadCount(request: FastifyRequest, reply: FastifyReply) {
-    const count = await this.service.getUnreadCount(request.user.id)
+    const count = await this.service.getUnreadCount(request.user.id, request.user.role, request.user.patientId)
     return reply.send({ success: true, data: { unread_count: count } })
   }
 }

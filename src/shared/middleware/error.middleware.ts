@@ -54,9 +54,6 @@ export function errorHandler(
   const statusCode = fastifyError.statusCode || 500
   reply.status(statusCode).send({
     success: false,
-    error:
-      process.env.NODE_ENV === 'production'
-        ? 'Internal server error'
-        : error.message || 'Unknown error',
+    error: error.message || 'Unknown error',
   })
 }

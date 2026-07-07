@@ -3,6 +3,7 @@ import { ScreeningService } from './screening.service'
 import {
   CreateScreeningScheduleSchema, ScreeningScheduleSchema,
   CreateScreeningResultSchema, ScreeningResultSchema,
+  SearchPatientsSchema,
 } from './screening.schema'
 
 export class ScreeningController {
@@ -86,6 +87,12 @@ export class ScreeningController {
   ) {
     const days = request.query.days ? parseInt(request.query.days) : 30
     const data = await this.service.getDueSchedules(days)
+    return reply.send({ success: true, data })
+  }
+
+  async searchPatients(request: FastifyRequest, reply: FastifyReply) {
+    const query = SearchPatientsSchema.parse(request.query)
+    const data = await this.service.searchPatients(query)
     return reply.send({ success: true, data })
   }
 }

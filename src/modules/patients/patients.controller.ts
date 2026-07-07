@@ -1,9 +1,13 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { PatientService } from './patients.service'
-import { CreatePatientSchema, UpdatePatientSchema, SendSmsSchema, SearchPatientsSchema } from './patients.schema'
-import { saveMultipartFiles, cleanupFiles } from '../../shared/utils/multipart'
+import { CreatePatientSchema, UpdatePatientSchema, SendSmsSchema, SearchPatientsSchema, PatientSelfUpdateSchema } from './patients.schema'
+import { parseMultipart, saveBufferedFiles, cleanupFiles } from '../../shared/utils/multipart'
 import { fileService } from '../../shared/services'
 import { smsService } from '../../shared/services'
+import { NotFoundError } from '../../shared/errors'
+import { attachments } from '../../db/schema.js'
+import { getDb } from '../../db/client.js'
+import { eq } from 'drizzle-orm'
 
 export class PatientController {
   constructor(private patientService: PatientService) { }
@@ -13,19 +17,34 @@ export class PatientController {
       return reply.status(400).send({ success: false, error: 'Request must be multipart/form-data' })
     }
 
-    const uploadDir = fileService.getUploadDir()
-    const { files: uploadedFiles, fields } = await saveMultipartFiles(request.parts(), uploadDir)
+    const { files: bufferedFiles, fields } = await parseMultipart(request.parts())
+    let savedFiles: Awaited<ReturnType<typeof saveBufferedFiles>> = []
 
     try {
       const rawPatient = fields.patient ? JSON.parse(fields.patient as string) : null
 
       if (!rawPatient) {
-        await cleanupFiles(uploadDir, uploadedFiles)
         return reply.status(400).send({ success: false, error: 'Patient data is required' })
       }
 
       const dto = CreatePatientSchema.parse({ patient: rawPatient })
-      const newPatient = await this.patientService.create(dto, uploadedFiles)
+      const newPatient = await this.patientService.create(dto, [])
+
+      if (bufferedFiles.length > 0) {
+        savedFiles = await saveBufferedFiles(bufferedFiles, newPatient.id)
+        const attachmentRows = savedFiles.map((file) => ({
+          patientId: newPatient.id,
+          fileType: file.type || (file.fieldname?.replace(/\[\]$/, '') ?? 'unknown'),
+          fileName: file.originalName,
+          filePath: file.filePath,
+          fileHash: file.fileHash,
+          fileSize: file.fileSize,
+          mimeType: file.mimeType,
+          storagePath: file.relativePath,
+        }))
+        const db = getDb()
+        await db.insert(attachments).values(attachmentRows)
+      }
 
       if (newPatient.phone) {
         smsService.send(
@@ -40,7 +59,9 @@ export class PatientController {
         patientId: newPatient.id,
       })
     } catch (error) {
-      await cleanupFiles(uploadDir, uploadedFiles)
+      if (savedFiles.length > 0) {
+        await cleanupFiles(savedFiles)
+      }
       throw error
     }
   }
@@ -69,22 +90,23 @@ export class PatientController {
       return reply.status(400).send({ success: false, error: 'Request must be multipart/form-data' })
     }
 
-    const uploadDir = fileService.getUploadDir()
-    const { files: uploadedFiles, fields } = await saveMultipartFiles(request.parts(), uploadDir)
+    const { files: bufferedFiles, fields } = await parseMultipart(request.parts())
+    let savedFiles: Awaited<ReturnType<typeof saveBufferedFiles>> = []
 
     try {
       const rawPatient = fields.patient ? JSON.parse(fields.patient as string) : null
 
       if (!rawPatient) {
-        await cleanupFiles(uploadDir, uploadedFiles)
         return reply.status(400).send({ success: false, error: 'Patient data is required' })
       }
 
-      const dto = UpdatePatientSchema.parse({
-        patient: rawPatient,
-      })
+      const dto = UpdatePatientSchema.parse({ patient: rawPatient })
 
-      const result = await this.patientService.update(patientId, dto, uploadedFiles)
+      if (bufferedFiles.length > 0) {
+        savedFiles = await saveBufferedFiles(bufferedFiles, patientId)
+      }
+
+      const result = await this.patientService.update(patientId, dto, savedFiles)
 
       return reply.status(200).send({
         success: true,
@@ -92,7 +114,9 @@ export class PatientController {
         patient: result,
       })
     } catch (error) {
-      await cleanupFiles(uploadDir, uploadedFiles)
+      if (savedFiles.length > 0) {
+        await cleanupFiles(savedFiles)
+      }
       throw error
     }
   }
@@ -116,6 +140,27 @@ export class PatientController {
     })
   }
 
+  async updateMyProfile(request: FastifyRequest, reply: FastifyReply) {
+    const { patientId } = request.user
+    if (!patientId) {
+      return reply.status(400).send({ success: false, error: 'No patient profile linked to your account' })
+    }
+
+    const dto = PatientSelfUpdateSchema.parse(request.body)
+    const result = await this.patientService.updateMyProfile(patientId, dto)
+
+    return reply.send({
+      success: true,
+      message: 'پروفایل با موفقیت به‌روزرسانی شد.',
+      patient: result,
+    })
+  }
+
+  async getDoctors(_request: FastifyRequest, reply: FastifyReply) {
+    const data = await this.patientService.getDoctors()
+    return reply.status(200).send({ success: true, data })
+  }
+
   async deleteAttachment(
     request: FastifyRequest<{ Params: { patientId: string; attachmentId: string } }>,
     reply: FastifyReply
@@ -126,5 +171,48 @@ export class PatientController {
       success: true,
       message: 'Attachment deleted successfully',
     })
+  }
+
+  async serveFile(
+    request: FastifyRequest<{ Params: { attachmentId: string } }>,
+    reply: FastifyReply
+  ) {
+    const { attachmentId } = request.params
+
+    const db = getDb()
+    const [attachment] = await db
+      .select()
+      .from(attachments)
+      .where(eq(attachments.id, attachmentId))
+
+    if (!attachment) {
+      throw new NotFoundError('Attachment')
+    }
+
+    const storageTarget = attachment.storagePath
+      || attachment.filePath.replace('/uploads/', '')
+
+    const result = await fileService.getFileStream(storageTarget)
+    if (!result) {
+      throw new NotFoundError('File')
+    }
+
+    const mimeType = attachment.mimeType || 'application/octet-stream'
+    reply.header('Content-Type', mimeType)
+    reply.header('Content-Disposition', `inline; filename="${attachment.fileName}"`)
+    reply.header('Cache-Control', 'private, max-age=3600')
+
+    if (result.contentType) {
+      reply.header('Content-Type', result.contentType)
+    }
+
+    if (result.stream && typeof (result.stream as any).pipe === 'function') {
+      return reply.send(result.stream as NodeJS.ReadableStream)
+    }
+
+    const { createReadStream } = await import('node:fs')
+    const filePath = fileService.getAbsolutePath(storageTarget)
+    const stream = createReadStream(filePath)
+    return reply.send(stream)
   }
 }

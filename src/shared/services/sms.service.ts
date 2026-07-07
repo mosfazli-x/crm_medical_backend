@@ -27,6 +27,9 @@ export class SmsService {
   }
 
   async send(mobile: string, text: string): Promise<boolean> {
+    if (!env.SMS_ENABLED) {
+      return true
+    }
     try {
       const cfg = this.getConfig()
       const response = await axios.get(cfg.baseUrl, {
@@ -43,6 +46,33 @@ export class SmsService {
     } catch (error) {
       console.error('SMS send failed:', error instanceof Error ? error.message : error)
       return false
+    }
+  }
+
+  async getCredit(): Promise<{ sent: number | null; remaining: number | null } | null> {
+    if (!env.SMS_ENABLED) {
+      return null
+    }
+    try {
+      const cfg = this.getConfig()
+      const creditUrl = cfg.baseUrl.replace('/send', '/credit')
+      const response = await axios.get(creditUrl, {
+        params: {
+          username: cfg.username,
+          password: cfg.password,
+        },
+        timeout: 10000,
+      })
+      const data = response.data
+      if (data && typeof data === 'object') {
+        return {
+          sent: data.total_sent ?? data.sent ?? null,
+          remaining: data.remaining_credit ?? data.remaining ?? data.credit ?? null,
+        }
+      }
+      return null
+    } catch {
+      return null
     }
   }
 }
