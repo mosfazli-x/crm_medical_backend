@@ -194,12 +194,16 @@ export class S3StorageProvider {
     }
   }
 
-  async getPresignedUrl(key: string, expiresInSeconds: number = 3600): Promise<string | null> {
+  async getPresignedUrl(key: string, expiresInSeconds: number = 3600, contentDisposition?: string): Promise<string | null> {
     try {
-      const command = new GetObjectCommand({
+      const params: Record<string, any> = {
         Bucket: this.bucket,
         Key: key,
-      })
+      }
+      if (contentDisposition) {
+        params.ResponseContentDisposition = contentDisposition
+      }
+      const command = new GetObjectCommand(params)
       return await getSignedUrl(this.client, command, { expiresIn: expiresInSeconds })
     } catch (error) {
       console.error(`Failed to generate presigned URL: ${key}`, error)

@@ -7,7 +7,8 @@ import { smsService } from '../../shared/services'
 import { NotFoundError } from '../../shared/errors'
 import { attachments } from '../../db/schema.js'
 import { getDb } from '../../db/client.js'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
+import { env } from '../../config/env.js'
 
 export class PatientController {
   constructor(private patientService: PatientService) { }
@@ -130,6 +131,49 @@ export class PatientController {
     return reply.status(502).send({ success: false, error: 'Failed to send SMS' })
   }
 
+  async getDownloadUrl(
+    request: FastifyRequest<{ Params: { patientId: string; attachmentId: string }; Querystring: { download?: string } }>,
+    reply: FastifyReply
+  ) {
+    const { patientId, attachmentId } = request.params
+    const forceDownload = request.query.download === 'true'
+
+    const db = getDb()
+    const [attachment] = await db
+      .select()
+      .from(attachments)
+      .where(and(eq(attachments.id, attachmentId), eq(attachments.patientId, patientId)))
+
+    if (!attachment || attachment.isDeleted) {
+      throw new NotFoundError('Attachment')
+    }
+
+    const storageTarget = attachment.storagePath
+      || attachment.filePath.replace('/uploads/', '')
+
+    const contentDisposition = forceDownload
+      ? `attachment; filename="${encodeURIComponent(attachment.fileName)}"`
+      : undefined
+
+    const presignedUrl = await fileService.getPresignedUrl(storageTarget, env.PRESIGNED_URL_EXPIRY, contentDisposition)
+    if (!presignedUrl) {
+      throw new NotFoundError('File')
+    }
+
+    return reply.status(200).send({
+      success: true,
+      data: {
+        id: attachment.id,
+        fileName: attachment.fileName,
+        fileType: attachment.fileType,
+        mimeType: attachment.mimeType,
+        fileSize: attachment.fileSize,
+        downloadUrl: presignedUrl,
+        expiresIn: env.PRESIGNED_URL_EXPIRY,
+      },
+    })
+  }
+
   async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     const { id } = request.params
     const result = await this.patientService.softDelete(id)
@@ -191,6 +235,14 @@ export class PatientController {
 
     const storageTarget = attachment.storagePath
       || attachment.filePath.replace('/uploads/', '')
+
+    if (env.STORAGE_DRIVER === 's3') {
+      const presignedUrl = await fileService.getPresignedUrl(storageTarget, env.PRESIGNED_URL_EXPIRY)
+      if (!presignedUrl) {
+        throw new NotFoundError('File')
+      }
+      return reply.redirect(presignedUrl, 302)
+    }
 
     const result = await fileService.getFileStream(storageTarget)
     if (!result) {

@@ -211,9 +211,9 @@ export class FileService {
     }
   }
 
-  async getPresignedUrl(key: string, expiresInSeconds: number = 3600): Promise<string | null> {
+  async getPresignedUrl(key: string, expiresInSeconds: number = 3600, contentDisposition?: string): Promise<string | null> {
     if (this.driver === 's3' && this.s3Provider) {
-      return this.s3Provider.getPresignedUrl(key, expiresInSeconds)
+      return this.s3Provider.getPresignedUrl(key, expiresInSeconds, contentDisposition)
     }
     return null
   }

@@ -8,6 +8,7 @@ import {
 import { eq, and, desc, inArray, sql } from 'drizzle-orm'
 import { NotFoundError } from '../../shared/errors'
 import { getInsuranceInfo } from '../../shared/constants/insurance'
+import { env } from '../../config/env.js'
 
 export interface PatientProfile {
   basicInfo: any
@@ -140,16 +141,22 @@ export class PatientProfileService {
           fileHash: attachments.fileHash,
           fileSize: attachments.fileSize,
           mimeType: attachments.mimeType,
+          storagePath: attachments.storagePath,
           createdAt: attachments.createdAt,
         })
         .from(attachments)
         .where(and(eq(attachments.patientId, patientId), eq(attachments.isDeleted, false)))
 
+      const addDownloadUrl = (file: any) => ({
+        ...file,
+        downloadUrl: null as string | null,
+      })
+
       const groupedAttachments = {
-        ultrasound: attachmentsList.filter((f) => f.fileType === 'ultrasound'),
-        lab: attachmentsList.filter((f) => f.fileType === 'lab'),
-        prescription: attachmentsList.filter((f) => f.fileType === 'prescription'),
-        other: attachmentsList.filter((f) => !['ultrasound', 'lab', 'prescription'].includes(f.fileType)),
+        ultrasound: attachmentsList.filter((f) => f.fileType === 'ultrasound').map(addDownloadUrl),
+        lab: attachmentsList.filter((f) => f.fileType === 'lab').map(addDownloadUrl),
+        prescription: attachmentsList.filter((f) => f.fileType === 'prescription').map(addDownloadUrl),
+        other: attachmentsList.filter((f) => !['ultrasound', 'lab', 'prescription'].includes(f.fileType)).map(addDownloadUrl),
       }
 
       return {

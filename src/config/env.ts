@@ -39,6 +39,8 @@ const envSchema = z.object({
   S3_BUCKET: z.string().default('crm-uploads'),
   S3_ACCESS_KEY: z.string().optional(),
   S3_SECRET_KEY: z.string().optional(),
+
+  PRESIGNED_URL_EXPIRY: z.coerce.number().int().positive().default(3600),
 })
 
 const parsed = envSchema.safeParse(process.env)

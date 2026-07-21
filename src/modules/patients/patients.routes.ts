@@ -31,6 +31,12 @@ export async function patientRoutes(fastify: FastifyInstance) {
     (req, rep) => controller.deleteAttachment(req, rep)
   )
 
+  fastify.get<{ Params: { patientId: string; attachmentId: string } }>(
+    '/:patientId/attachments/:attachmentId/download',
+    { preHandler: requireRole('admin_doctor', 'doctor') },
+    (req, rep) => controller.getDownloadUrl(req, rep)
+  )
+
   fastify.patch(
     '/me',
     { preHandler: authenticate },

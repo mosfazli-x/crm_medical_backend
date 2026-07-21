@@ -15,6 +15,7 @@ import { getInsuranceInfo } from '../../shared/constants/insurance'
 import { fileService } from '../../shared/services'
 import type { CreatePatientDto, UpdatePatientDto, SearchPatientsDto } from './patients.schema'
 import bcrypt from 'bcrypt'
+import { env } from '../../config/env.js'
 
 export class PatientService {
   constructor(private db: DB) {}
@@ -67,6 +68,28 @@ export class PatientService {
             patientId: insertedPatient.id,
             substance: a.substance,
             severity: a.severity || '\u0645\u062A\u0648\u0633\u0637',
+          }))
+        )
+      }
+
+      if (dto.patient.pregnancies && dto.patient.pregnancies.length > 0) {
+        await tx.insert(pregnancies).values(
+          dto.patient.pregnancies.map((p) => ({
+            patientId: insertedPatient.id,
+            gravidaIndex: p.gravida_index ?? null,
+            status: p.status || 'completed',
+            lmp: p.lmp || null,
+            edd: p.edd || null,
+            endDate: p.end_date || null,
+            gestationalAgeWeeks: p.gestational_age_weeks ?? null,
+            gestationalAgeDays: p.gestational_age_days ?? null,
+            outcome: p.outcome || null,
+            deliveryMethod: p.delivery_method || null,
+            anesthesiaType: p.anesthesia_type || null,
+            maternalComplications: p.maternal_complications || [],
+            prenatalScreenings: p.prenatal_screenings || {},
+            newbornsDetails: p.newborns_details || [],
+            notes: p.notes || null,
           }))
         )
       }
@@ -225,16 +248,22 @@ export class PatientService {
               fileHash: attachments.fileHash,
               fileSize: attachments.fileSize,
               mimeType: attachments.mimeType,
+              storagePath: attachments.storagePath,
               createdAt: attachments.createdAt,
             })
             .from(attachments)
             .where(and(eq(attachments.patientId, id), eq(attachments.isDeleted, false))),
         ])
 
+      const addDownloadUrl = (file: any) => ({
+        ...file,
+        downloadUrl: null as string | null,
+      })
+
       const groupedAttachments = {
-        ultrasound: attachmentsList.filter((f) => f.fileType === 'ultrasound'),
-        lab: attachmentsList.filter((f) => f.fileType === 'lab'),
-        prescription: attachmentsList.filter((f) => f.fileType === 'prescription'),
+        ultrasound: attachmentsList.filter((f) => f.fileType === 'ultrasound').map(addDownloadUrl),
+        lab: attachmentsList.filter((f) => f.fileType === 'lab').map(addDownloadUrl),
+        prescription: attachmentsList.filter((f) => f.fileType === 'prescription').map(addDownloadUrl),
       }
 
       return {
@@ -316,6 +345,35 @@ export class PatientService {
             await tx.update(allergies).set(payload).where(eq(allergies.id, a.id))
           } else {
             await tx.insert(allergies).values(payload)
+          }
+        }
+      }
+
+      if (p.pregnancies !== undefined) {
+        const incomingIds = p.pregnancies.filter((pg) => pg.id).map((pg) => pg.id!)
+        await syncRelated(tx, pregnancies, pregnancies.patientId, patientId, incomingIds)
+        for (const pg of p.pregnancies) {
+          const payload = {
+            patientId,
+            gravidaIndex: pg.gravida_index ?? null,
+            status: pg.status || 'completed',
+            lmp: pg.lmp || null,
+            edd: pg.edd || null,
+            endDate: pg.end_date || null,
+            gestationalAgeWeeks: pg.gestational_age_weeks ?? null,
+            gestationalAgeDays: pg.gestational_age_days ?? null,
+            outcome: pg.outcome || null,
+            deliveryMethod: pg.delivery_method || null,
+            anesthesiaType: pg.anesthesia_type || null,
+            maternalComplications: pg.maternal_complications || [],
+            prenatalScreenings: pg.prenatal_screenings || {},
+            newbornsDetails: pg.newborns_details || [],
+            notes: pg.notes || null,
+          }
+          if (pg.id) {
+            await tx.update(pregnancies).set(payload).where(eq(pregnancies.id, pg.id))
+          } else {
+            await tx.insert(pregnancies).values(payload)
           }
         }
       }
