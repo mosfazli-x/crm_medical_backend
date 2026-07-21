@@ -2,6 +2,7 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  GetObjectCommandInput,
   DeleteObjectCommand,
   CopyObjectCommand,
   ListObjectsV2Command,
@@ -196,7 +197,7 @@ export class S3StorageProvider {
 
   async getPresignedUrl(key: string, expiresInSeconds: number = 3600, contentDisposition?: string): Promise<string | null> {
     try {
-      const params: Record<string, any> = {
+      const params: GetObjectCommandInput = {
         Bucket: this.bucket,
         Key: key,
       }

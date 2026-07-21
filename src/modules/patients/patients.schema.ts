@@ -45,7 +45,7 @@ export const CreatePatientSchema = z.object({
         onset_date: z.string().optional(),
         notes: z.string().optional(),
       })).optional().default([]),
-      prenatal_screenings: z.record(z.boolean()).optional().default({}),
+      prenatal_screenings: z.record(z.string(), z.boolean()).optional().default({}),
       newborns_details: z.array(z.object({
         gender: z.string().optional(),
         weight: z.number().nullable().optional(),
@@ -109,7 +109,7 @@ export const UpdatePatientSchema = z.object({
         onset_date: z.string().optional(),
         notes: z.string().optional(),
       })).optional().default([]),
-      prenatal_screenings: z.record(z.boolean()).optional().default({}),
+      prenatal_screenings: z.record(z.string(), z.boolean()).optional().default({}),
       newborns_details: z.array(z.object({
         gender: z.string().optional(),
         weight: z.number().nullable().optional(),
