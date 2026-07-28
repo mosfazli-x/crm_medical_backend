@@ -3,11 +3,14 @@ import { SchedulingService } from './scheduling.service'
 import {
   CreateAvailabilitySchema,
   UpdateAvailabilitySchema,
+  AdminCreateAvailabilitySchema,
+  AdminGetAppointmentsSchema,
   BookAppointmentSchema,
   UpdateAppointmentStatusSchema,
   SendAppointmentSmsSchema,
 } from './scheduling.schema'
 import { notificationService, smsService } from '../../shared/services'
+import { gregorianToJalaliStr } from '../../shared/utils'
 
 export class SchedulingController {
   constructor(private schedulingService: SchedulingService) {}
@@ -15,6 +18,45 @@ export class SchedulingController {
   async getDoctors(_request: FastifyRequest, reply: FastifyReply) {
     const data = await this.schedulingService.getDoctors()
     return reply.status(200).send({ success: true, data })
+  }
+
+  async getDoctorsForAdmin(_request: FastifyRequest, reply: FastifyReply) {
+    const data = await this.schedulingService.getDoctorsForAdmin()
+    return reply.status(200).send({ success: true, data })
+  }
+
+  async adminCreateAvailability(request: FastifyRequest, reply: FastifyReply) {
+    const dto = AdminCreateAvailabilitySchema.parse(request.body)
+    const data = await this.schedulingService.adminCreateAvailability(dto)
+    return reply.status(201).send({ success: true, message: 'Availability created successfully', data })
+  }
+
+  async adminUpdateAvailability(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = request.params
+    const dto = UpdateAvailabilitySchema.parse(request.body)
+    const data = await this.schedulingService.adminUpdateAvailability(id, dto)
+    return reply.status(200).send({ success: true, message: 'Availability updated successfully', data })
+  }
+
+  async adminDeleteAvailability(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = request.params
+    await this.schedulingService.adminDeleteAvailability(id)
+    return reply.status(200).send({ success: true, message: 'Availability deleted successfully' })
+  }
+
+  async adminGetDoctorAppointments(
+    request: FastifyRequest<{ Querystring: { doctorId: string; date?: string } }>,
+    reply: FastifyReply
+  ) {
+    const { doctorId, date } = AdminGetAppointmentsSchema.parse(request.query)
+    const appointments = await this.schedulingService.adminGetDoctorAppointments(doctorId, date)
+    return reply.status(200).send({ success: true, data: appointments })
   }
 
   async getDoctorAvailability(
@@ -74,12 +116,13 @@ export class SchedulingController {
     const { appointment, doctorName } = await this.schedulingService.bookAppointment(dto)
 
     if (appointment.patientPhone) {
-      const text = `نوبت شما در تاریخ ${appointment.appointmentDate} ساعت ${appointment.startTime} با دکتر ${doctorName} با موفقیت ثبت شد.\nآدرس کلینیک: تهران-پاسداران، بستان ۸، ساختمان مهرب`
+      const jalaliDate = gregorianToJalaliStr(appointment.appointmentDate)
+      const text = `نوبت شما در تاریخ ${jalaliDate} ساعت ${appointment.startTime} با دکتر ${doctorName} با موفقیت ثبت شد.\nآدرس کلینیک: تهران-پاسداران، بوستان ۸، ساختمان مهرا، طبقه پنجم واحد ده`
       const patientId = appointment.patientId || undefined
       if (patientId) {
-        notificationService.notifyByPatient(patientId, text, appointment.patientPhone)
+        notificationService.notifyByPatient(patientId, text, appointment.patientPhone, 'appointment_book')
       } else {
-        notificationService.notifyByPhone(appointment.patientPhone, text)
+        notificationService.notifyByPhone(appointment.patientPhone, text, undefined, 'appointment_book')
       }
     }
 
@@ -110,15 +153,17 @@ export class SchedulingController {
     const { appointment, doctorName } = await this.schedulingService.updateAppointmentStatus(id, doctorId, dto)
 
     if (appointment.patientPhone && (dto.status === 'confirmed' || dto.status === 'rejected')) {
+      const jalaliDate = gregorianToJalaliStr(appointment.appointmentDate)
       const message =
         dto.status === 'confirmed'
-          ? `نوبت شما در تاریخ ${appointment.appointmentDate} ساعت ${appointment.startTime} با دکتر ${doctorName} تایید شد.`
-          : `نوبت شما در تاریخ ${appointment.appointmentDate} ساعت ${appointment.startTime} با دکتر ${doctorName} رد شد.`
+          ? `نوبت شما در تاریخ ${jalaliDate} ساعت ${appointment.startTime} با دکتر ${doctorName} تایید شد.`
+          : `نوبت شما در تاریخ ${jalaliDate} ساعت ${appointment.startTime} با دکتر ${doctorName} رد شد.`
       const patientId = appointment.patientId || undefined
+      const eventKey = dto.status === 'confirmed' ? 'appointment_confirmed' : 'appointment_rejected'
       if (patientId) {
-        notificationService.notifyByPatient(patientId, message, appointment.patientPhone)
+        notificationService.notifyByPatient(patientId, message, appointment.patientPhone, eventKey)
       } else {
-        notificationService.notifyByPhone(appointment.patientPhone, message)
+        notificationService.notifyByPhone(appointment.patientPhone, message, undefined, eventKey)
       }
     }
 
@@ -136,9 +181,9 @@ export class SchedulingController {
 
     const patientId = info.patientId || undefined
     if (patientId) {
-      notificationService.notifyByPatient(patientId, info.text, info.patientPhone)
+      notificationService.notifyByPatient(patientId, info.text, info.patientPhone, 'appointment_manual_sms')
     } else {
-      notificationService.notifyByPhone(info.patientPhone, info.text)
+      notificationService.notifyByPhone(info.patientPhone, info.text, undefined, 'appointment_manual_sms')
     }
 
     return reply.status(200).send({

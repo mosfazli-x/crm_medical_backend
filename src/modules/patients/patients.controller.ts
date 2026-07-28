@@ -2,8 +2,8 @@ import type { FastifyRequest, FastifyReply } from 'fastify'
 import { PatientService } from './patients.service'
 import { CreatePatientSchema, UpdatePatientSchema, SendSmsSchema, SearchPatientsSchema, PatientSelfUpdateSchema } from './patients.schema'
 import { parseMultipart, saveBufferedFiles, cleanupFiles } from '../../shared/utils/multipart'
-import { fileService } from '../../shared/services'
-import { smsService } from '../../shared/services'
+import { fileService, auditService } from '../../shared/services'
+import { smsService, notificationService } from '../../shared/services'
 import { NotFoundError } from '../../shared/errors'
 import { attachments } from '../../db/schema.js'
 import { getDb } from '../../db/client.js'
@@ -31,6 +31,16 @@ export class PatientController {
       const dto = CreatePatientSchema.parse({ patient: rawPatient })
       const newPatient = await this.patientService.create(dto, [])
 
+      await auditService.log({
+        userId: (request.user as any)?.id,
+        action: 'create',
+        entityType: 'patient',
+        entityId: newPatient.id,
+        newValues: { firstName: newPatient.firstName, lastName: newPatient.lastName, nationalId: newPatient.nationalId },
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+      })
+
       if (bufferedFiles.length > 0) {
         savedFiles = await saveBufferedFiles(bufferedFiles, newPatient.id)
         const attachmentRows = savedFiles.map((file) => ({
@@ -48,10 +58,13 @@ export class PatientController {
       }
 
       if (newPatient.phone) {
-        smsService.send(
-          newPatient.phone,
-          `سلام ${newPatient.firstName} عزیز، ثبت‌نام شما در کلینیک تخصصی دکتر حسینی با موفقیت انجام شد. برای شما آرزوی سلامتی داریم.`
-        )
+        const patientCreateAllowed = await notificationService.isChannelEnabled('patient_create', 'sms')
+        if (patientCreateAllowed) {
+          smsService.send(
+            newPatient.phone,
+            `سلام ${newPatient.firstName} عزیز، ثبت‌نام شما در کلینیک تخصصی دکتر حسینی با موفقیت انجام شد. برای شما آرزوی سلامتی داریم.`
+          )
+        }
       }
 
       return reply.status(201).send({
@@ -108,6 +121,16 @@ export class PatientController {
       }
 
       const result = await this.patientService.update(patientId, dto, savedFiles)
+
+      await auditService.log({
+        userId: (request.user as any)?.id,
+        action: 'update',
+        entityType: 'patient',
+        entityId: patientId,
+        newValues: rawPatient,
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+      })
 
       return reply.status(200).send({
         success: true,
@@ -177,6 +200,16 @@ export class PatientController {
   async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     const { id } = request.params
     const result = await this.patientService.softDelete(id)
+
+    await auditService.log({
+      userId: (request.user as any)?.id,
+      action: 'delete',
+      entityType: 'patient',
+      entityId: id,
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent'],
+    })
+
     return reply.status(200).send({
       success: true,
       message: 'Patient deleted successfully (soft delete)',

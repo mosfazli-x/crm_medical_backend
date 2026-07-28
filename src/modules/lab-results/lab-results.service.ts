@@ -2,14 +2,15 @@ import type { DB } from '../../db/client'
 import { patients, labResults } from '../../db/schema'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { NotFoundError } from '../../shared/errors'
-import type { LabResultDto } from './lab-results.schema'
+import type { CreateLabResultDto, UpdateLabResultDto } from './lab-results.schema'
 
 export class LabResultsService {
   constructor(private db: DB) {}
 
-  async getByPatient(patientId: string, category?: string) {
+  async getByPatient(patientId: string, category?: string, reportType?: string) {
     const conditions = [eq(labResults.patientId, patientId)]
     if (category) conditions.push(eq(labResults.category, category))
+    if (reportType) conditions.push(eq(labResults.reportType, reportType))
     return this.db
       .select()
       .from(labResults)
@@ -27,7 +28,7 @@ export class LabResultsService {
     return result
   }
 
-  async create(dto: LabResultDto) {
+  async create(dto: CreateLabResultDto) {
     const [patient] = await this.db
       .select({ id: patients.id })
       .from(patients)
@@ -42,17 +43,47 @@ export class LabResultsService {
         category: dto.category,
         testName: dto.test_name,
         testCode: dto.test_code || null,
-        value: dto.value,
+        value: dto.value || null,
         unit: dto.unit || null,
         referenceRangeLow: dto.reference_range_low || null,
         referenceRangeHigh: dto.reference_range_high || null,
         isAbnormal: dto.is_abnormal || null,
+        reportType: dto.report_type || 'simple',
+        reportData: dto.report_data || null,
         performedDate: new Date(dto.performed_date),
         performedBy: dto.performed_by || null,
         notes: dto.notes || null,
       })
       .returning()
     return result
+  }
+
+  async update(id: string, dto: UpdateLabResultDto) {
+    const updateData: Record<string, unknown> = {}
+
+    if (dto.category !== undefined) updateData.category = dto.category
+    if (dto.test_name !== undefined) updateData.testName = dto.test_name
+    if (dto.value !== undefined) updateData.value = dto.value
+    if (dto.unit !== undefined) updateData.unit = dto.unit
+    if (dto.reference_range_low !== undefined) updateData.referenceRangeLow = dto.reference_range_low
+    if (dto.reference_range_high !== undefined) updateData.referenceRangeHigh = dto.reference_range_high
+    if (dto.is_abnormal !== undefined) updateData.isAbnormal = dto.is_abnormal
+    if (dto.report_type !== undefined) updateData.reportType = dto.report_type
+    if (dto.report_data !== undefined) updateData.reportData = dto.report_data
+    if (dto.notes !== undefined) updateData.notes = dto.notes
+
+    if (Object.keys(updateData).length === 0) {
+      return this.getById(id)
+    }
+
+    const [updated] = await this.db
+      .update(labResults)
+      .set(updateData)
+      .where(eq(labResults.id, id))
+      .returning()
+
+    if (!updated) throw new NotFoundError('Lab result')
+    return updated
   }
 
   async delete(id: string) {

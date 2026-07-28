@@ -41,6 +41,8 @@ const envSchema = z.object({
   S3_SECRET_KEY: z.string().optional(),
 
   PRESIGNED_URL_EXPIRY: z.coerce.number().int().positive().default(3600),
+
+  CORS_ORIGIN: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)

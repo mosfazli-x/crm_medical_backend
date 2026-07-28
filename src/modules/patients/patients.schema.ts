@@ -57,6 +57,18 @@ export const CreatePatientSchema = z.object({
       })).optional().default([]),
       notes: z.string().nullable().optional(),
     })).optional().default([]),
+    vaccinations: z.array(z.object({
+      vaccine_name: z.string().min(1),
+      dose_number: z.string().optional().nullable(),
+      date_administered: z.string().nullable().optional(),
+      lot_number: z.string().optional().nullable(),
+      manufacturer: z.string().optional().nullable(),
+      site: z.string().optional().nullable(),
+      administered_by: z.string().optional().nullable(),
+      next_dose_date: z.string().nullable().optional(),
+      status: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
+    })).optional().default([]),
   }),
 })
 
@@ -120,6 +132,19 @@ export const UpdatePatientSchema = z.object({
         nicu: z.boolean().optional(),
       })).optional().default([]),
       notes: z.string().nullable().optional(),
+    })).optional(),
+    vaccinations: z.array(z.object({
+      id: z.string().optional(),
+      vaccine_name: z.string().min(1),
+      dose_number: z.string().optional().nullable(),
+      date_administered: z.string().nullable().optional(),
+      lot_number: z.string().optional().nullable(),
+      manufacturer: z.string().optional().nullable(),
+      site: z.string().optional().nullable(),
+      administered_by: z.string().optional().nullable(),
+      next_dose_date: z.string().nullable().optional(),
+      status: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
     })).optional(),
   }),
 })

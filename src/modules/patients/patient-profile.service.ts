@@ -3,7 +3,7 @@ import {
   patients, diseases, medications, allergies, visits, pregnancies, attachments,
   menstrualHistory, sexualHistory, gynecologicalSurgeries, contraceptiveHistory,
   familyHistory, reproductiveSummary, prenatalVisits, fetalMeasurements, postpartumCarePlans,
-  screeningSchedules, screeningResults, labResults, consentRecords
+  screeningSchedules, screeningResults, labResults, consentRecords, vaccinations
 } from '../../db/schema'
 import { eq, and, desc, inArray, sql } from 'drizzle-orm'
 import { NotFoundError } from '../../shared/errors'
@@ -16,6 +16,7 @@ export interface PatientProfile {
     diseases: any[]
     medications: any[]
     allergies: any[]
+    vaccinations: any[]
   }
   reproductiveHealth: {
     menstrualHistory: any
@@ -58,10 +59,12 @@ export class PatientProfileService {
 
       if (!patient) throw new NotFoundError('Patient')
 
-      const [diseasesList, medicationsList, allergiesList] = await Promise.all([
+      const [diseasesList, medicationsList, allergiesList, vaccinationsList] = await Promise.all([
         tx.select().from(diseases).where(eq(diseases.patientId, patientId)),
         tx.select().from(medications).where(eq(medications.patientId, patientId)),
         tx.select().from(allergies).where(eq(allergies.patientId, patientId)),
+        tx.select().from(vaccinations).where(eq(vaccinations.patientId, patientId))
+          .orderBy(sql`${vaccinations.dateAdministered} DESC NULLS LAST`),
       ])
 
       const [mh, sh, surgeries, contraceptives, famHistory, rs] = await Promise.all([
@@ -184,6 +187,7 @@ export class PatientProfileService {
           diseases: diseasesList,
           medications: medicationsList,
           allergies: allergiesList,
+          vaccinations: vaccinationsList,
         },
         reproductiveHealth: {
           menstrualHistory: mh[0] || null,

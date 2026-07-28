@@ -1,17 +1,17 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { LabResultsService } from './lab-results.service'
-import { CreateLabResultSchema, LabResultSchema } from './lab-results.schema'
+import { CreateLabResultSchema, UpdateLabResultSchema } from './lab-results.schema'
 
 export class LabResultsController {
   constructor(private service: LabResultsService) {}
 
   async getByPatient(
-    request: FastifyRequest<{ Params: { patientId: string }; Querystring: { category?: string } }>,
+    request: FastifyRequest<{ Params: { patientId: string }; Querystring: { category?: string; reportType?: string } }>,
     reply: FastifyReply
   ) {
     const { patientId } = request.params
-    const { category } = request.query
-    const data = await this.service.getByPatient(patientId, category)
+    const { category, reportType } = request.query
+    const data = await this.service.getByPatient(patientId, category, reportType)
     return reply.send({ success: true, data })
   }
 
@@ -27,7 +27,17 @@ export class LabResultsController {
   async create(request: FastifyRequest, reply: FastifyReply) {
     const dto = CreateLabResultSchema.parse(request.body)
     const data = await this.service.create(dto)
-    return reply.status(201).send({ success: true, data, message: 'Lab result recorded' })
+    return reply.status(201).send({ success: true, data, message: 'نتیجه آزمایش ثبت شد' })
+  }
+
+  async update(
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) {
+    const { id } = request.params
+    const dto = UpdateLabResultSchema.parse(request.body)
+    const data = await this.service.update(id, dto)
+    return reply.send({ success: true, data, message: 'نتیجه آزمایش به‌روزرسانی شد' })
   }
 
   async delete(
@@ -36,7 +46,7 @@ export class LabResultsController {
   ) {
     const { id } = request.params
     await this.service.delete(id)
-    return reply.send({ success: true, message: 'Lab result deleted' })
+    return reply.send({ success: true, message: 'نتیجه آزمایش حذف شد' })
   }
 
   async getTrend(

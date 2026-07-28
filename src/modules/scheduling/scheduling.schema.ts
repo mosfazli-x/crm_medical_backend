@@ -26,6 +26,21 @@ export const UpdateAvailabilitySchema = z.object({
   { message: 'startTime must be before endTime', path: ['startTime'] }
 )
 
+export const AdminCreateAvailabilitySchema = z.object({
+  doctorId: z.string().uuid('Invalid doctor ID'),
+  dayOfWeek: z.number().int().min(0).max(6),
+  startTime: z.string().regex(timePattern, 'Invalid time format (HH:MM)'),
+  endTime: z.string().regex(timePattern, 'Invalid time format (HH:MM)'),
+}).refine((data) => data.startTime < data.endTime, {
+  message: 'startTime must be before endTime',
+  path: ['startTime'],
+})
+
+export const AdminGetAppointmentsSchema = z.object({
+  doctorId: z.string().uuid('Invalid doctor ID'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)').optional(),
+})
+
 export const BookAppointmentSchema = z.object({
   doctorId: z.string().uuid('Invalid doctor ID'),
   appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)'),
@@ -51,6 +66,8 @@ export const SendAppointmentSmsSchema = z.object({
 
 export type CreateAvailabilityDto = z.infer<typeof CreateAvailabilitySchema>
 export type UpdateAvailabilityDto = z.infer<typeof UpdateAvailabilitySchema>
+export type AdminCreateAvailabilityDto = z.infer<typeof AdminCreateAvailabilitySchema>
+export type AdminGetAppointmentsDto = z.infer<typeof AdminGetAppointmentsSchema>
 export type BookAppointmentDto = z.infer<typeof BookAppointmentSchema>
 export type UpdateAppointmentStatusDto = z.infer<typeof UpdateAppointmentStatusSchema>
 export type SendAppointmentSmsDto = z.infer<typeof SendAppointmentSmsSchema>

@@ -13,7 +13,11 @@ export const RegisterSchema = z.object({
     .regex(/^09\d{9}$/, 'Phone must start with 09 and be 11 digits'),
   fullName: z.string().min(2, 'Full name must be at least 2 characters'),
   role: z.enum(['admin_doctor', 'doctor', 'lab', 'pharmacy', 'patient']),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number'),
 })
 
 export const ForgotPasswordSchema = z.object({
@@ -30,7 +34,11 @@ export const ResetPasswordSchema = z.object({
     .string()
     .length(5, 'OTP code must be exactly 5 digits')
     .regex(/^\d{5}$/, 'OTP code must be 5 digits'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number'),
 })
 
 export const UpdateProfileSchema = z.object({
@@ -40,7 +48,11 @@ export const UpdateProfileSchema = z.object({
 
 export const ChangePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
-  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+  newPassword: z.string()
+    .min(8, 'New password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number'),
 })
 
 export type LoginDto = z.infer<typeof LoginSchema>

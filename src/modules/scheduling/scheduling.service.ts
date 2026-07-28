@@ -2,7 +2,7 @@ import type { DB } from '../../db/client'
 import { users, doctorAvailability, appointments, doctorVisitTypes } from '../../db/schema'
 import { and, eq, sql } from 'drizzle-orm'
 import { NotFoundError, ConflictError } from '../../shared/errors'
-import type { CreateAvailabilityDto, UpdateAvailabilityDto, BookAppointmentDto, UpdateAppointmentStatusDto, SendAppointmentSmsDto } from './scheduling.schema'
+import type { CreateAvailabilityDto, UpdateAvailabilityDto, AdminCreateAvailabilityDto, BookAppointmentDto, UpdateAppointmentStatusDto, SendAppointmentSmsDto } from './scheduling.schema'
 
 export class SchedulingService {
   constructor(private db: DB) {}
@@ -16,6 +16,102 @@ export class SchedulingService {
       .from(users)
       .where(and(eq(users.role, 'doctor'), eq(users.status, 'approved')))
       .orderBy(users.fullName)
+  }
+
+  async getDoctorsForAdmin() {
+    return this.db
+      .select({
+        id: users.id,
+        fullName: users.fullName,
+        phone: users.phone,
+        role: users.role,
+      })
+      .from(users)
+      .where(and(
+        sql`${users.role} IN ('doctor', 'admin_doctor')`,
+        eq(users.status, 'approved')
+      ))
+      .orderBy(users.fullName)
+  }
+
+  async adminCreateAvailability(dto: AdminCreateAvailabilityDto) {
+    const [newAvailability] = await this.db
+      .insert(doctorAvailability)
+      .values({
+        doctorId: dto.doctorId,
+        dayOfWeek: dto.dayOfWeek,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+      })
+      .returning()
+
+    return newAvailability
+  }
+
+  async adminUpdateAvailability(id: string, dto: UpdateAvailabilityDto) {
+    const [existing] = await this.db
+      .select()
+      .from(doctorAvailability)
+      .where(eq(doctorAvailability.id, id))
+      .limit(1)
+
+    if (!existing) throw new NotFoundError('Availability')
+
+    const updates: Record<string, unknown> = {}
+    if (dto.dayOfWeek !== undefined) updates.dayOfWeek = dto.dayOfWeek
+    if (dto.startTime !== undefined) updates.startTime = dto.startTime
+    if (dto.endTime !== undefined) updates.endTime = dto.endTime
+    if (dto.isActive !== undefined) updates.isActive = dto.isActive
+
+    const [updated] = await this.db
+      .update(doctorAvailability)
+      .set(updates)
+      .where(eq(doctorAvailability.id, id))
+      .returning()
+
+    return updated
+  }
+
+  async adminDeleteAvailability(id: string) {
+    const [deleted] = await this.db
+      .delete(doctorAvailability)
+      .where(eq(doctorAvailability.id, id))
+      .returning()
+
+    if (!deleted) throw new NotFoundError('Availability')
+
+    return deleted
+  }
+
+  async adminGetDoctorAppointments(doctorId: string, date?: string) {
+    const conditions = [eq(appointments.doctorId, doctorId)]
+
+    if (date) {
+      conditions.push(eq(appointments.appointmentDate, date))
+    }
+
+    return this.db
+      .select({
+        id: appointments.id,
+        doctorId: appointments.doctorId,
+        appointmentDate: appointments.appointmentDate,
+        startTime: appointments.startTime,
+        endTime: appointments.endTime,
+        status: appointments.status,
+        visitTypeId: appointments.visitTypeId,
+        visitTypeName: doctorVisitTypes.name,
+        visitTypeColor: doctorVisitTypes.color,
+        patientFirstName: appointments.patientFirstName,
+        patientLastName: appointments.patientLastName,
+        patientNationalId: appointments.patientNationalId,
+        patientPhone: appointments.patientPhone,
+        createdAt: appointments.createdAt,
+        updatedAt: appointments.updatedAt,
+      })
+      .from(appointments)
+      .leftJoin(doctorVisitTypes, eq(appointments.visitTypeId, doctorVisitTypes.id))
+      .where(and(...conditions))
+      .orderBy(appointments.appointmentDate, appointments.startTime)
   }
 
   async getDoctorAvailability(doctorId: string) {

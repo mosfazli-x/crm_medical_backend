@@ -4,6 +4,7 @@ import jwt from '@fastify/jwt'
 import fastifyMultipart from '@fastify/multipart'
 import fastifyStatic from '@fastify/static'
 import path from 'node:path'
+import { sql } from 'drizzle-orm'
 import { env } from './config/env'
 import { errorHandler } from './shared/middleware'
 import dbPlugin from './shared/plugins/db.plugin'
@@ -21,8 +22,12 @@ export async function buildApp() {
 
   app.setErrorHandler(errorHandler)
 
+  const corsOrigins = env.NODE_ENV === 'production'
+    ? [env.CORS_ORIGIN || 'https://yourdomain.com']
+    : true
+
   await app.register(cors, {
-    origin: true,
+    origin: corsOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   })
@@ -55,6 +60,10 @@ export async function buildApp() {
 
   await app.register(dbPlugin)
 
+  // Initialize default clinic settings
+  const settingsSvc = new SettingsService((app as any).db)
+  await settingsSvc.initDefaults()
+
   await app.register(authRoutes, { prefix: '/api/auth' })
   await app.register(patientRoutes, { prefix: '/api/patients' })
   await app.register(patientRoutes, { prefix: '/api/patient' })
@@ -73,8 +82,21 @@ export async function buildApp() {
   await app.register(consentRoutes, { prefix: '/api/consent' })
   await app.register(telegramRoutes, { prefix: '/api/telegram' })
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' })
+  await app.register(staffRoutes, { prefix: '/api/staff' })
+  await app.register(settingsRoutes, { prefix: '/api/settings' })
+  await app.register(auditRoutes, { prefix: '/api/audit' })
+  await app.register(prescriptionRoutes, { prefix: '/api/prescriptions' })
+  await app.register(labOrderItemsRoutes, { prefix: '/api/lab-order-items' })
 
-  app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
+  app.get('/health', async (_, reply) => {
+    try {
+      await (app as any).db.execute(sql`SELECT 1 as ok`)
+      return { status: 'ok', db: 'connected', timestamp: new Date().toISOString() }
+    } catch (err) {
+      reply.status(503)
+      return { status: 'error', db: 'disconnected', timestamp: new Date().toISOString() }
+    }
+  })
 
   app.get('/api/insurance-types', async () => {
     return { success: true, data: INSURANCE_TYPE_VALUES }
@@ -99,3 +121,9 @@ import { consentRoutes } from './modules/consent'
 import { visitTypesRoutes } from './modules/visit-types'
 import { telegramRoutes } from './modules/telegram'
 import { dashboardRoutes } from './modules/dashboard'
+import { staffRoutes } from './modules/staff'
+import { settingsRoutes } from './modules/settings'
+import { auditRoutes } from './modules/audit'
+import { prescriptionRoutes } from './modules/prescriptions'
+import { labOrderItemsRoutes } from './modules/lab-order-items'
+import { SettingsService } from './modules/settings'

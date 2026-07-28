@@ -2,6 +2,9 @@ import type { DB } from '../../db/client'
 import { users, otpCodes } from '../../db/schema'
 import { and, eq, gt, isNull, sql, ne } from 'drizzle-orm'
 import { ConflictError, UnauthorizedError, ForbiddenError, NotFoundError, TooManyRequestsError, ValidationError } from '../../shared/errors'
+
+const BLOCKED_SELF_REGISTRATION_ROLES = ['clinic_staff']
+
 import { smsService, notificationService } from '../../shared/services'
 import type { LoginDto, RegisterDto, ForgotPasswordDto, ResetPasswordDto, UpdateProfileDto, ChangePasswordDto } from './auth.schema'
 import bcrypt from 'bcrypt'
@@ -54,6 +57,10 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
+    if (BLOCKED_SELF_REGISTRATION_ROLES.includes(dto.role)) {
+      throw new ForbiddenError('ثبت‌نام با این نقش از طریق عمومی مجاز نیست')
+    }
+
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS)
 
     try {
@@ -86,7 +93,7 @@ export class AuthService {
       }
 
       const message = `سلام ${dto.fullName} عزیز، ثبت‌نام شما در کلینیک تخصصی دکتر حسینی با نقش ${roleNames[dto.role] || dto.role} با موفقیت انجام شد.`
-      notificationService.notifyByUser(newUser.id, message).catch(() => {})
+      notificationService.notifyByUser(newUser.id, message, 'auth_register').catch(() => {})
 
       return newUser
     } catch (error: unknown) {
@@ -271,7 +278,10 @@ export class AuthService {
     })
 
     const message = `کد تایید تغییر رمز عبور شما: ${code}\nاین کد تا ۵ دقیقه معتبر است.`
-    smsService.send(dto.phone, message).catch(() => {})
+    const otpAllowed = await notificationService.isChannelEnabled('auth_otp', 'sms')
+    if (otpAllowed) {
+      smsService.send(dto.phone, message).catch(() => {})
+    }
 
     return { success: true }
   }

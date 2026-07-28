@@ -4,7 +4,7 @@ import { ProcedureCodeSchema, CreateBillingRecordSchema, SearchPatientsSchema } 
 import { z } from 'zod'
 
 const UpdateStatusSchema = z.object({
-  status: z.string().min(1),
+  status: z.enum(['pending', 'billed', 'paid', 'partially_paid', 'written_off', 'cancelled']),
   paid_date: z.string().optional().nullable(),
 })
 
@@ -72,6 +72,15 @@ export class BillingController {
   async searchPatients(request: FastifyRequest, reply: FastifyReply) {
     const query = SearchPatientsSchema.parse(request.query)
     const data = await this.service.searchPatients(query)
+    return reply.send({ success: true, data })
+  }
+
+  async getReport(
+    request: FastifyRequest<{ Querystring: { startDate?: string; endDate?: string; status?: string } }>,
+    reply: FastifyReply
+  ) {
+    const { startDate, endDate, status } = request.query
+    const data = await this.service.getReport({ startDate, endDate, status })
     return reply.send({ success: true, data })
   }
 }

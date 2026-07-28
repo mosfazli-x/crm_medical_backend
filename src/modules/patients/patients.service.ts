@@ -8,6 +8,7 @@ import {
   allergies,
   pregnancies,
   attachments,
+  vaccinations,
 } from '../../db/schema'
 import { eq, and, or, notInArray, desc, sql, ilike, inArray } from 'drizzle-orm'
 import { NotFoundError, ConflictError } from '../../shared/errors'
@@ -90,6 +91,24 @@ export class PatientService {
             prenatalScreenings: p.prenatal_screenings || {},
             newbornsDetails: p.newborns_details || [],
             notes: p.notes || null,
+          }))
+        )
+      }
+
+      if (dto.patient.vaccinations && dto.patient.vaccinations.length > 0) {
+        await tx.insert(vaccinations).values(
+          dto.patient.vaccinations.map((v) => ({
+            patientId: insertedPatient.id,
+            vaccineName: v.vaccine_name,
+            doseNumber: v.dose_number || null,
+            dateAdministered: v.date_administered || null,
+            lotNumber: v.lot_number || null,
+            manufacturer: v.manufacturer || null,
+            site: v.site || null,
+            administeredBy: v.administered_by || null,
+            nextDoseDate: v.next_dose_date || null,
+            status: v.status || 'completed',
+            notes: v.notes || null,
           }))
         )
       }
@@ -220,7 +239,7 @@ export class PatientService {
 
       if (!patient) throw new NotFoundError('Patient')
 
-      const [diseasesList, medicationsList, allergiesList, obstetricHistory, attachmentsList] =
+      const [diseasesList, medicationsList, allergiesList, obstetricHistory, attachmentsList, vaccinationsList] =
         await Promise.all([
           tx
             .select({ name: diseases.name, diagnosed_at: diseases.diagnosedAt, id: diseases.id })
@@ -253,6 +272,11 @@ export class PatientService {
             })
             .from(attachments)
             .where(and(eq(attachments.patientId, id), eq(attachments.isDeleted, false))),
+          tx
+            .select()
+            .from(vaccinations)
+            .where(eq(vaccinations.patientId, id))
+            .orderBy(sql`${vaccinations.dateAdministered} DESC NULLS LAST`),
         ])
 
       const addDownloadUrl = (file: any) => ({
@@ -274,6 +298,7 @@ export class PatientService {
         allergies: allergiesList,
         obstetricHistory,
         attachments: groupedAttachments,
+        vaccinations: vaccinationsList,
       }
     })
 
@@ -374,6 +399,31 @@ export class PatientService {
             await tx.update(pregnancies).set(payload).where(eq(pregnancies.id, pg.id))
           } else {
             await tx.insert(pregnancies).values(payload)
+          }
+        }
+      }
+
+      if (p.vaccinations !== undefined) {
+        const incomingIds = p.vaccinations.filter((v) => v.id).map((v) => v.id!)
+        await syncRelated(tx, vaccinations, vaccinations.patientId, patientId, incomingIds)
+        for (const v of p.vaccinations) {
+          const payload = {
+            patientId,
+            vaccineName: v.vaccine_name,
+            doseNumber: v.dose_number || null,
+            dateAdministered: v.date_administered || null,
+            lotNumber: v.lot_number || null,
+            manufacturer: v.manufacturer || null,
+            site: v.site || null,
+            administeredBy: v.administered_by || null,
+            nextDoseDate: v.next_dose_date || null,
+            status: v.status || 'completed',
+            notes: v.notes || null,
+          }
+          if (v.id) {
+            await tx.update(vaccinations).set(payload).where(eq(vaccinations.id, v.id))
+          } else {
+            await tx.insert(vaccinations).values(payload)
           }
         }
       }

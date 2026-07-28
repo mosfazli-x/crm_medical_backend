@@ -3,6 +3,7 @@ import { PatientController } from './patients.controller'
 import { PatientService } from './patients.service'
 import { PatientProfileController } from './patient-profile.controller'
 import { PatientProfileService } from './patient-profile.service'
+import { buildFullRecordHtml } from './patient-record.template'
 import { authenticate, requireRole } from '../../shared/middleware'
 
 export async function patientRoutes(fastify: FastifyInstance) {
@@ -53,6 +54,22 @@ export async function patientRoutes(fastify: FastifyInstance) {
     '/:id/profile',
     { preHandler: requireRole('admin_doctor', 'doctor') },
     (req, rep) => profileController.getProfile(req, rep)
+  )
+
+  fastify.get<{ Params: { id: string } }>(
+    '/:id/full-record',
+    { preHandler: requireRole('admin_doctor', 'doctor') },
+    async (req, rep) => {
+      const { id } = req.params
+      const data = await profileService.getPatientProfile(id)
+      const generatedAt = new Date().toLocaleDateString('fa-IR', {
+        year: 'numeric', month: 'long', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+      const html = buildFullRecordHtml(data, generatedAt)
+      rep.header('Content-Type', 'text/html; charset=utf-8')
+      return rep.send(html)
+    }
   )
 
   fastify.get<{ Params: { attachmentId: string } }>(

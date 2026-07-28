@@ -17,4 +17,6 @@ export async function billingRoutes(fastify: FastifyInstance) {
   fastify.get<{ Params: { patientId: string } }>('/patient/:patientId/balance', { preHandler: requireRole('admin_doctor', 'doctor') }, controller.getPatientBalance.bind(controller))
 
   fastify.get('/patients/search', { preHandler: requireRole('admin_doctor', 'doctor') }, controller.searchPatients.bind(controller))
+
+  fastify.get<{ Querystring: { startDate?: string; endDate?: string; status?: string } }>('/report', { preHandler: requireRole('admin_doctor') }, controller.getReport.bind(controller))
 }

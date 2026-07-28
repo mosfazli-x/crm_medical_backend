@@ -5,6 +5,21 @@ import { telegramService } from './shared/services'
 async function main() {
   const app = await buildApp()
 
+  const shutdown = async (signal: string) => {
+    app.log.info(`Received ${signal}, shutting down gracefully...`)
+    try {
+      await app.close()
+      app.log.info('Server closed successfully')
+      process.exit(0)
+    } catch (err) {
+      app.log.error(err, 'Error during shutdown')
+      process.exit(1)
+    }
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
+
   try {
     const port = process.env.BACKEND_PORT
       ? Number(process.env.BACKEND_PORT)

@@ -193,4 +193,39 @@ export class BillingService {
       .orderBy(desc(patients.createdAt))
       .limit(50)
   }
+
+  async getReport(filters: { startDate?: string; endDate?: string; status?: string }) {
+    const conditions: ReturnType<typeof eq>[] = []
+    if (filters.status) conditions.push(eq(billingRecords.status, filters.status))
+    if (filters.startDate) {
+      conditions.push(sql`${billingRecords.createdAt} >= ${filters.startDate}`)
+    }
+    if (filters.endDate) {
+      conditions.push(sql`${billingRecords.createdAt} <= ${filters.endDate}`)
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+
+    const [summary] = await this.db
+      .select({
+        totalRecords: sql<number>`count(*)::int`,
+        totalAmount: sql<string>`coalesce(sum(${billingRecords.amount}::numeric), 0)`,
+        totalInsurance: sql<string>`coalesce(sum(${billingRecords.insuranceClaimAmount}::numeric), 0)`,
+        totalPatientPay: sql<string>`coalesce(sum(${billingRecords.patientPayAmount}::numeric), 0)`,
+      })
+      .from(billingRecords)
+      .where(whereClause)
+
+    const byStatus = await this.db
+      .select({
+        status: billingRecords.status,
+        count: sql<number>`count(*)::int`,
+        totalAmount: sql<string>`coalesce(sum(${billingRecords.amount}::numeric), 0)`,
+      })
+      .from(billingRecords)
+      .where(whereClause)
+      .groupBy(billingRecords.status)
+
+    return { summary, byStatus }
+  }
 }

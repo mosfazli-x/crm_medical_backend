@@ -2,7 +2,7 @@ import { smsService } from './sms.service'
 import { telegramService } from './telegram.service'
 import type { DB } from '../../db/client'
 import { getDb } from '../../db/client'
-import { telegramLinks, users } from '../../db/schema'
+import { telegramLinks, users, clinicSettings } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
 export class NotificationService {
@@ -10,7 +10,27 @@ export class NotificationService {
     return getDb()
   }
 
-  async notifyByUser(userId: string, text: string): Promise<void> {
+  /**
+   * Check if a notification channel is enabled for a given event.
+   * Reads from clinic_settings table. Returns true if the setting is missing (fail-open).
+   */
+  async isChannelEnabled(eventKey: string, channel: 'sms' | 'telegram'): Promise<boolean> {
+    try {
+      const db = this.ensureDb()
+      const settingKey = `notif_${channel}_${eventKey}`
+      const [row] = await db
+        .select({ value: clinicSettings.value })
+        .from(clinicSettings)
+        .where(eq(clinicSettings.key, settingKey))
+        .limit(1)
+      if (!row) return true
+      return row.value === 'true'
+    } catch {
+      return true
+    }
+  }
+
+  async notifyByUser(userId: string, text: string, eventKey?: string): Promise<void> {
     const db = this.ensureDb()
 
     const [user] = await db
@@ -22,23 +42,29 @@ export class NotificationService {
     if (!user) return
 
     if (user.phone && user.smsEnabled) {
-      smsService.send(user.phone, text)
+      const smsAllowed = eventKey ? await this.isChannelEnabled(eventKey, 'sms') : true
+      if (smsAllowed) {
+        smsService.send(user.phone, text)
+      }
     }
 
     if (user.telegramEnabled && telegramService.isConfigured()) {
-      const [link] = await db
-        .select({ chatId: telegramLinks.chatId })
-        .from(telegramLinks)
-        .where(eq(telegramLinks.userId, userId))
-        .limit(1)
+      const tgAllowed = eventKey ? await this.isChannelEnabled(eventKey, 'telegram') : true
+      if (tgAllowed) {
+        const [link] = await db
+          .select({ chatId: telegramLinks.chatId })
+          .from(telegramLinks)
+          .where(eq(telegramLinks.userId, userId))
+          .limit(1)
 
-      if (link) {
-        telegramService.sendMessage(link.chatId, text)
+        if (link) {
+          telegramService.sendMessage(link.chatId, text)
+        }
       }
     }
   }
 
-  async notifyByPatient(patientId: string, text: string, phone?: string): Promise<void> {
+  async notifyByPatient(patientId: string, text: string, phone?: string, eventKey?: string): Promise<void> {
     const db = this.ensureDb()
 
     const [user] = await db
@@ -49,29 +75,38 @@ export class NotificationService {
 
     if (user) {
       if (user.phone && user.smsEnabled) {
-        smsService.send(user.phone, text)
+        const smsAllowed = eventKey ? await this.isChannelEnabled(eventKey, 'sms') : true
+        if (smsAllowed) {
+          smsService.send(user.phone, text)
+        }
       }
 
       if (user.telegramEnabled && telegramService.isConfigured()) {
-        const [link] = await db
-          .select({ chatId: telegramLinks.chatId })
-          .from(telegramLinks)
-          .where(eq(telegramLinks.userId, user.id))
-          .limit(1)
+        const tgAllowed = eventKey ? await this.isChannelEnabled(eventKey, 'telegram') : true
+        if (tgAllowed) {
+          const [link] = await db
+            .select({ chatId: telegramLinks.chatId })
+            .from(telegramLinks)
+            .where(eq(telegramLinks.userId, user.id))
+            .limit(1)
 
-        if (link) {
-          telegramService.sendMessage(link.chatId, text)
+          if (link) {
+            telegramService.sendMessage(link.chatId, text)
+          }
         }
       }
       return
     }
 
     if (phone) {
-      smsService.send(phone, text)
+      const smsAllowed = eventKey ? await this.isChannelEnabled(eventKey, 'sms') : true
+      if (smsAllowed) {
+        smsService.send(phone, text)
+      }
     }
   }
 
-  async notifyByPhone(phone: string, text: string, userId?: string): Promise<void> {
+  async notifyByPhone(phone: string, text: string, userId?: string, eventKey?: string): Promise<void> {
     if (userId) {
       const db = this.ensureDb()
       const [user] = await db
@@ -82,36 +117,48 @@ export class NotificationService {
 
       if (user) {
         if (user.smsEnabled) {
-          smsService.send(phone, text)
+          const smsAllowed = eventKey ? await this.isChannelEnabled(eventKey, 'sms') : true
+          if (smsAllowed) {
+            smsService.send(phone, text)
+          }
         }
 
         if (user.telegramEnabled && telegramService.isConfigured()) {
-          const [link] = await db
-            .select({ chatId: telegramLinks.chatId })
-            .from(telegramLinks)
-            .where(eq(telegramLinks.userId, userId))
-            .limit(1)
+          const tgAllowed = eventKey ? await this.isChannelEnabled(eventKey, 'telegram') : true
+          if (tgAllowed) {
+            const [link] = await db
+              .select({ chatId: telegramLinks.chatId })
+              .from(telegramLinks)
+              .where(eq(telegramLinks.userId, userId))
+              .limit(1)
 
-          if (link) {
-            telegramService.sendMessage(link.chatId, text)
+            if (link) {
+              telegramService.sendMessage(link.chatId, text)
+            }
           }
         }
         return
       }
     }
 
-    smsService.send(phone, text)
+    const smsAllowed = eventKey ? await this.isChannelEnabled(eventKey, 'sms') : true
+    if (smsAllowed) {
+      smsService.send(phone, text)
+    }
 
     if (userId && telegramService.isConfigured()) {
-      const db = this.ensureDb()
-      const [link] = await db
-        .select({ chatId: telegramLinks.chatId })
-        .from(telegramLinks)
-        .where(eq(telegramLinks.userId, userId))
-        .limit(1)
+      const tgAllowed = eventKey ? await this.isChannelEnabled(eventKey, 'telegram') : true
+      if (tgAllowed) {
+        const db = this.ensureDb()
+        const [link] = await db
+          .select({ chatId: telegramLinks.chatId })
+          .from(telegramLinks)
+          .where(eq(telegramLinks.userId, userId))
+          .limit(1)
 
-      if (link) {
-        telegramService.sendMessage(link.chatId, text)
+        if (link) {
+          telegramService.sendMessage(link.chatId, text)
+        }
       }
     }
   }
