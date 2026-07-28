@@ -87,6 +87,7 @@ export async function buildApp() {
   await app.register(auditRoutes, { prefix: '/api/audit' })
   await app.register(prescriptionRoutes, { prefix: '/api/prescriptions' })
   await app.register(labOrderItemsRoutes, { prefix: '/api/lab-order-items' })
+  await app.register(bookingRoutes, { prefix: '/api/booking' })
 
   app.get('/health', async (_, reply) => {
     try {
@@ -126,4 +127,5 @@ import { settingsRoutes } from './modules/settings'
 import { auditRoutes } from './modules/audit'
 import { prescriptionRoutes } from './modules/prescriptions'
 import { labOrderItemsRoutes } from './modules/lab-order-items'
+import { bookingRoutes } from './modules/booking'
 import { SettingsService } from './modules/settings'
