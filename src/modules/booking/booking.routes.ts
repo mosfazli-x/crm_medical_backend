@@ -10,4 +10,19 @@ export async function bookingRoutes(fastify: FastifyInstance) {
     '/services',
     (req, rep) => controller.getServices(req, rep)
   )
+
+  fastify.get(
+    '/doctors',
+    (req, rep) => controller.getDoctors(req, rep)
+  )
+
+  fastify.get<{ Params: { doctorId: string }; Querystring: { date?: string } }>(
+    '/slots/:doctorId',
+    (req, rep) => controller.getAvailableSlots(req, rep)
+  )
+
+  fastify.post(
+    '/appointments',
+    (req, rep) => controller.bookAppointment(req, rep)
+  )
 }

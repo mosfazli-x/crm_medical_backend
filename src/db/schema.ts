@@ -699,3 +699,106 @@ export const clinicSettings = pgTable('clinic_settings', {
 }, (table) => ({
     keyIdx: sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_settings_key ON clinic_settings(key)`,
 }));
+
+// ─── Accounting Module ───
+
+export const chartOfAccounts = pgTable('chart_of_accounts', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    code: varchar('code', { length: 20 }).notNull().unique(),
+    name: varchar('name', { length: 255 }).notNull(),
+    type: varchar('type', { length: 30 }).notNull(),
+    parentId: uuid('parent_id'),
+    description: text('description'),
+    isActive: boolean('is_active').default(true),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    typeIdx: sql`CREATE INDEX IF NOT EXISTS idx_coa_type ON chart_of_accounts(type)`,
+    parentIdx: sql`CREATE INDEX IF NOT EXISTS idx_coa_parent ON chart_of_accounts(parent_id)`,
+    activeIdx: sql`CREATE INDEX IF NOT EXISTS idx_coa_active ON chart_of_accounts(is_active)`,
+}));
+
+export const journalEntries = pgTable('journal_entries', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    entryNumber: varchar('entry_number', { length: 50 }).notNull().unique(),
+    entryDate: date('entry_date').notNull(),
+    description: text('description').notNull(),
+    reference: varchar('reference', { length: 100 }),
+    referenceType: varchar('reference_type', { length: 50 }),
+    createdById: uuid('created_by_id').references(() => users.id),
+    status: varchar('status', { length: 20 }).default('posted'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    entryDateIdx: sql`CREATE INDEX IF NOT EXISTS idx_je_entry_date ON journal_entries(entry_date)`,
+    statusIdx: sql`CREATE INDEX IF NOT EXISTS idx_je_status ON journal_entries(status)`,
+    referenceIdx: sql`CREATE INDEX IF NOT EXISTS idx_je_reference ON journal_entries(reference, reference_type)`,
+    createdByIdx: sql`CREATE INDEX IF NOT EXISTS idx_je_created_by ON journal_entries(created_by_id)`,
+}));
+
+export const journalEntryLines = pgTable('journal_entry_lines', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    journalEntryId: uuid('journal_entry_id').notNull().references(() => journalEntries.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id').notNull().references(() => chartOfAccounts.id),
+    debit: decimal('debit', { precision: 15, scale: 2 }).default('0'),
+    credit: decimal('credit', { precision: 15, scale: 2 }).default('0'),
+    description: text('description'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    journalIdx: sql`CREATE INDEX IF NOT EXISTS idx_jel_journal ON journal_entry_lines(journal_entry_id)`,
+    accountIdx: sql`CREATE INDEX IF NOT EXISTS idx_jel_account ON journal_entry_lines(account_id)`,
+}));
+
+// ─── Inventory Module ───
+
+export const inventoryCategories = pgTable('inventory_categories', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 255 }).notNull(),
+    description: text('description'),
+    isActive: boolean('is_active').default(true),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    activeIdx: sql`CREATE INDEX IF NOT EXISTS idx_inv_cat_active ON inventory_categories(is_active)`,
+}));
+
+export const products = pgTable('products', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 255 }).notNull(),
+    sku: varchar('sku', { length: 50 }).unique(),
+    barcode: varchar('barcode', { length: 100 }),
+    categoryId: uuid('category_id').references(() => inventoryCategories.id),
+    unit: varchar('unit', { length: 50 }).notNull().default('عدد'),
+    purchasePrice: decimal('purchase_price', { precision: 12, scale: 2 }),
+    sellingPrice: decimal('selling_price', { precision: 12, scale: 2 }),
+    currentStock: decimal('current_stock', { precision: 12, scale: 3 }).default('0'),
+    minStockLevel: decimal('min_stock_level', { precision: 12, scale: 3 }).default('0'),
+    description: text('description'),
+    isActive: boolean('is_active').default(true),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    categoryIdx: sql`CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)`,
+    skuIdx: sql`CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)`,
+    activeIdx: sql`CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active)`,
+    lowStockIdx: sql`CREATE INDEX IF NOT EXISTS idx_products_low_stock ON products(current_stock, min_stock_level)`,
+}));
+
+export const stockMovements = pgTable('stock_movements', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    productId: uuid('product_id').notNull().references(() => products.id, { onDelete: 'cascade' }),
+    movementType: varchar('movement_type', { length: 20 }).notNull(),
+    quantity: decimal('quantity', { precision: 12, scale: 3 }).notNull(),
+    unitPrice: decimal('unit_price', { precision: 12, scale: 2 }),
+    totalPrice: decimal('total_price', { precision: 15, scale: 2 }),
+    reference: varchar('reference', { length: 100 }),
+    referenceType: varchar('reference_type', { length: 50 }),
+    description: text('description'),
+    performedById: uuid('performed_by_id').references(() => users.id),
+    performedAt: timestamp('performed_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    productIdx: sql`CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id)`,
+    typeIdx: sql`CREATE INDEX IF NOT EXISTS idx_stock_movements_type ON stock_movements(movement_type)`,
+    performedIdx: sql`CREATE INDEX IF NOT EXISTS idx_stock_movements_performed ON stock_movements(performed_at)`,
+}));
