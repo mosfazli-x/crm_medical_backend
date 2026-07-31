@@ -1,7 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { PatientService } from './patients.service'
 import { CreatePatientSchema, UpdatePatientSchema, SendSmsSchema, SearchPatientsSchema, PatientSelfUpdateSchema } from './patients.schema'
-import { parseMultipart, saveBufferedFiles, cleanupFiles } from '../../shared/utils/multipart'
+import { parseMultipart, saveBufferedFiles, cleanupFiles, ATTACHMENT_TYPES } from '../../shared/utils/multipart'
 import { fileService, auditService } from '../../shared/services'
 import { smsService, notificationService } from '../../shared/services'
 import { NotFoundError } from '../../shared/errors'
@@ -248,6 +248,66 @@ export class PatientController {
       success: true,
       message: 'Attachment deleted successfully',
     })
+  }
+
+  async listAttachments(
+    request: FastifyRequest<{ Params: { patientId: string } }>,
+    reply: FastifyReply
+  ) {
+    const { patientId } = request.params
+    const data = await this.patientService.listAttachments(patientId)
+    return reply.status(200).send({ success: true, data })
+  }
+
+  async uploadAttachment(
+    request: FastifyRequest<{ Params: { patientId: string } }>,
+    reply: FastifyReply
+  ) {
+    if (!request.isMultipart()) {
+      return reply.status(400).send({ success: false, error: 'Request must be multipart/form-data' })
+    }
+
+    const { patientId } = request.params
+    const { files: bufferedFiles, fields } = await parseMultipart(request.parts(), [
+      'file', 'files', ...ATTACHMENT_TYPES,
+    ])
+
+    if (bufferedFiles.length === 0) {
+      return reply.status(400).send({ success: false, error: 'No file uploaded' })
+    }
+
+    const requestedType = (fields.type as string) || 'lab'
+    if (!ATTACHMENT_TYPES.includes(requestedType as (typeof ATTACHMENT_TYPES)[number])) {
+      return reply.status(400).send({ success: false, error: `Invalid document type: ${requestedType}` })
+    }
+
+    let savedFiles: Awaited<ReturnType<typeof saveBufferedFiles>> = []
+    try {
+      bufferedFiles.forEach((f) => { f.type = requestedType })
+      savedFiles = await saveBufferedFiles(bufferedFiles, patientId)
+      const data = await this.patientService.addAttachments(patientId, savedFiles)
+
+      await auditService.log({
+        userId: (request.user as any)?.id,
+        action: 'create',
+        entityType: 'attachment',
+        entityId: patientId,
+        newValues: { fileType: requestedType, fileCount: savedFiles.length },
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+      })
+
+      return reply.status(201).send({
+        success: true,
+        data,
+        message: 'Attachment uploaded successfully',
+      })
+    } catch (error) {
+      if (savedFiles.length > 0) {
+        await cleanupFiles(savedFiles)
+      }
+      throw error
+    }
   }
 
   async serveFile(

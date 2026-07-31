@@ -20,10 +20,28 @@ export interface BufferedFile {
   buffer: Buffer
 }
 
-const ALLOWED_FILE_TYPES = ['ultrasound', 'lab', 'prescription'] as const
+export const ATTACHMENT_TYPES = [
+  'ultrasound',
+  'lab',
+  'prescription',
+  'hormone',
+  'tumor_marker',
+  'cytology',
+  'pathology',
+  'microbiology',
+  'genetics',
+  'hematology',
+  'biochemistry',
+  'urinalysis',
+  'molecular',
+  'other',
+] as const
+
+const ALLOWED_FILE_TYPES = [...ATTACHMENT_TYPES] as const
 
 export async function parseMultipart(
-  parts: AsyncIterable<unknown>
+  parts: AsyncIterable<unknown>,
+  allowedTypes: readonly string[] = ALLOWED_FILE_TYPES
 ): Promise<{ files: BufferedFile[]; fields: Record<string, string | string[]> }> {
   const files: BufferedFile[] = []
   const fields: Record<string, string | string[]> = {}
@@ -39,7 +57,7 @@ export async function parseMultipart(
 
     if (typedPart.type === 'file' && typedPart.toBuffer) {
       const fieldName = typedPart.fieldname.replace('[]', '')
-      if (ALLOWED_FILE_TYPES.includes(fieldName as (typeof ALLOWED_FILE_TYPES)[number])) {
+      if (allowedTypes.includes(fieldName)) {
         const buffer = await typedPart.toBuffer()
         files.push({
           type: fieldName,

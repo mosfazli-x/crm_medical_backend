@@ -471,6 +471,51 @@ export class PatientService {
     })
   }
 
+  async listAttachments(patientId: string) {
+    return this.db
+      .select({
+        id: attachments.id,
+        fileType: attachments.fileType,
+        fileName: attachments.fileName,
+        filePath: attachments.filePath,
+        fileHash: attachments.fileHash,
+        fileSize: attachments.fileSize,
+        mimeType: attachments.mimeType,
+        storagePath: attachments.storagePath,
+        createdAt: attachments.createdAt,
+      })
+      .from(attachments)
+      .where(and(eq(attachments.patientId, patientId), eq(attachments.isDeleted, false)))
+      .orderBy(desc(attachments.createdAt))
+  }
+
+  async addAttachments(patientId: string, files: Array<{
+    type: string
+    originalName: string
+    filePath: string
+    fileHash?: string
+    fileSize?: number
+    mimeType?: string
+    relativePath?: string
+  }>) {
+    await this.db.transaction(async (tx) => {
+      if (files.length === 0) return
+      await tx.insert(attachments).values(
+        files.map((file) => ({
+          patientId,
+          fileType: file.type,
+          fileName: file.originalName,
+          filePath: file.filePath,
+          fileHash: file.fileHash ?? '',
+          fileSize: file.fileSize ?? 0,
+          mimeType: file.mimeType ?? 'application/octet-stream',
+          storagePath: file.relativePath ?? '',
+        }))
+      )
+    })
+    return this.listAttachments(patientId)
+  }
+
   async getDoctors() {
     return this.db
       .select({
