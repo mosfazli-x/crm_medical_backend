@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { api, generatePhone, registerTestUser } from './helpers'
 
 describe('Auth API', () => {
-  const testUser = { phone: '', password: 'test1234', fullName: 'Auth Test User' }
+  const testUser = { phone: '', password: 'Test1234', fullName: 'Auth Test User' }
   let patientToken = ''
   let patientId = ''
 
@@ -32,7 +32,7 @@ describe('Auth API', () => {
         phone: testUser.phone,
         fullName: 'Another User',
         role: 'patient',
-        password: 'test1234',
+        password: 'Test1234',
       })
       expect(status).toBe(409)
       expect(body.success).toBe(false)
@@ -44,7 +44,7 @@ describe('Auth API', () => {
         phone: '12345',
         fullName: 'Bad Phone',
         role: 'patient',
-        password: 'test1234',
+        password: 'Test1234',
       })
       expect(status).toBe(400)
       expect(body.success).toBe(false)
@@ -66,7 +66,7 @@ describe('Auth API', () => {
         phone: generatePhone(),
         fullName: 'Bad Role',
         role: 'invalid_role',
-        password: 'test1234',
+        password: 'Test1234',
       })
       expect(status).toBe(400)
       expect(body.success).toBe(false)
@@ -78,7 +78,7 @@ describe('Auth API', () => {
         phone,
         fullName: 'Test Doctor',
         role: 'doctor',
-        password: 'test1234',
+        password: 'Test1234',
       })
       expect(status).toBe(201)
       expect(body.success).toBe(true)
@@ -92,7 +92,8 @@ describe('Auth API', () => {
           phone,
           fullName: `Test ${role}`,
           role,
-          password: 'test1234',
+          organizationName: role === 'lab' || role === 'pharmacy' ? 'Test Clinic' : undefined,
+          password: 'Test1234',
         })
         expect(status).toBe(201)
         expect(body.success).toBe(true)
@@ -186,14 +187,14 @@ describe('Auth API', () => {
     it('should change password with correct current password', async () => {
       const { status, body } = await api.patch('/api/auth/change-password', {
         currentPassword: testUser.password,
-        newPassword: 'newpassword123',
+        newPassword: 'Newpassword123',
       }, patientToken)
       expect(status).toBe(200)
       expect(body.success).toBe(true)
 
       // Revert password for other tests
       await api.patch('/api/auth/change-password', {
-        currentPassword: 'newpassword123',
+        currentPassword: 'Newpassword123',
         newPassword: testUser.password,
       }, patientToken)
     })
@@ -201,7 +202,7 @@ describe('Auth API', () => {
     it('should reject wrong current password', async () => {
       const { status } = await api.patch('/api/auth/change-password', {
         currentPassword: 'wrongpassword',
-        newPassword: 'newpassword123',
+        newPassword: 'Newpassword123',
       }, patientToken)
       expect(status).toBe(401)
     })
@@ -209,7 +210,7 @@ describe('Auth API', () => {
     it('should reject without auth', async () => {
       const { status } = await api.patch('/api/auth/change-password', {
         currentPassword: 'test',
-        newPassword: 'newpassword123',
+        newPassword: 'Newpassword123',
       })
       expect(status).toBe(401)
     })
@@ -245,7 +246,7 @@ describe('Auth API', () => {
       const { status } = await api.post('/api/auth/reset-password', {
         phone: testUser.phone,
         code: '00000',
-        password: 'newpwd12345',
+        password: 'Newpwd12345',
       })
       expect(status).toBe(401)
     })

@@ -8,6 +8,7 @@ interface ApiResponse<T = any> {
   token?: string
   user?: any
   details?: any
+  pagination?: { page: number; limit: number; total: number; totalPages: number }
 }
 
 async function request<T = any>(
@@ -17,7 +18,6 @@ async function request<T = any>(
 ): Promise<{ status: number; body: ApiResponse<T> }> {
   const url = `${API_BASE}${path}`
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...options.headers,
   }
 
@@ -25,10 +25,16 @@ async function request<T = any>(
     headers['Authorization'] = `Bearer ${options.token}`
   }
 
+  const payload = options.body ? JSON.stringify(options.body) : undefined
+
+  if (payload !== undefined) {
+    headers['Content-Type'] = 'application/json'
+  }
+
   const res = await fetch(url, {
     method,
     headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    body: payload,
   })
 
   const body = await res.json().catch(() => ({}))
@@ -64,7 +70,7 @@ export async function registerTestUser(role: 'patient' | 'doctor' | 'admin_docto
     phone,
     fullName: `Test ${role}`,
     role,
-    password: 'test1234',
+    password: 'Test1234',
   })
 
   if (res.status >= 400) {
@@ -73,7 +79,7 @@ export async function registerTestUser(role: 'patient' | 'doctor' | 'admin_docto
 
   return {
     phone,
-    password: 'test1234',
+    password: 'Test1234',
     token: res.body.token!,
     user: res.body.user!,
   }

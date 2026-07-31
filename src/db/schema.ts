@@ -1,4 +1,4 @@
-import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, integer, jsonb, decimal, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, integer, jsonb, decimal, primaryKey, check, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm'
 
 export const patients = pgTable('patients', {
@@ -229,27 +229,27 @@ export const users = pgTable('users', {
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => {
     return {
-        chkStatus: sql`CHECK (status IN ('pending', 'approved', 'rejected'))`,
-        chkRoleValues: sql`CHECK (role IN ('admin_doctor', 'doctor', 'lab', 'pharmacy', 'patient', 'clinic_staff'))`,
-        chkPatientRole: sql`CHECK (
-      (role = 'patient' AND (${table.patientId} IS NOT NULL OR ${table.fullName} IS NOT NULL)) OR
-      (role != 'patient' AND ${table.patientId} IS NULL)
-    )`,
-        chkOrganization: sql`CHECK (
-      (role IN ('lab', 'pharmacy') AND ${table.organizationName} IS NOT NULL) OR
-      (role NOT IN ('lab', 'pharmacy'))
-    )`,
-        chkPatientName: sql`CHECK (
-      (role = 'patient' AND ${table.fullName} IS NOT NULL) OR
-      (role != 'patient')
-    )`,
+        chkStatus: check('chk_status', sql`${table.status} IN ('pending', 'approved', 'rejected')`),
+        chkRoleValues: check('chk_role_values', sql`${table.role} IN ('admin_doctor', 'doctor', 'lab', 'pharmacy', 'patient', 'clinic_staff')`),
+        chkPatientRole: check('chk_patient_role', sql`(
+        (${table.role} = 'patient' AND (${table.patientId} IS NOT NULL OR ${table.fullName} IS NOT NULL)) OR
+        (${table.role} != 'patient' AND ${table.patientId} IS NULL)
+      )`),
+        chkOrganization: check('chk_organization', sql`(
+        (${table.role} IN ('lab', 'pharmacy') AND ${table.organizationName} IS NOT NULL) OR
+        (${table.role} NOT IN ('lab', 'pharmacy'))
+      )`),
+        chkPatientName: check('chk_patient_name', sql`(
+        (${table.role} = 'patient' AND ${table.fullName} IS NOT NULL) OR
+        (${table.role} != 'patient')
+      )`),
     };
 });
 
 export const otpCodes = pgTable('otp_codes', {
     id: uuid('id').primaryKey().defaultRandom(),
     phone: varchar('phone', { length: 20 }).notNull(),
-    code: varchar('code', { length: 5 }).notNull(),
+    code: varchar('code', { length: 64 }).notNull(),
     type: varchar('type', { length: 50 }).default('password_reset').notNull(),
     expiresAt: timestamp('expires_at').notNull(),
     usedAt: timestamp('used_at'),
@@ -819,4 +819,114 @@ export const stockMovements = pgTable('stock_movements', {
     productIdx: sql`CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id)`,
     typeIdx: sql`CREATE INDEX IF NOT EXISTS idx_stock_movements_type ON stock_movements(movement_type)`,
     performedIdx: sql`CREATE INDEX IF NOT EXISTS idx_stock_movements_performed ON stock_movements(performed_at)`,
+}));
+
+export const leadSources = pgTable('lead_sources', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 100 }).notNull(),
+    type: varchar('type', { length: 30 }).notNull(),
+    category: varchar('category', { length: 30 }).notNull().default('other'),
+    description: text('description'),
+    color: varchar('color', { length: 7 }),
+    isActive: boolean('is_active').default(true).notNull(),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    activeIdx: index('idx_lead_sources_active').on(table.isActive),
+    typeIdx: index('idx_lead_sources_type').on(table.type),
+    chkType: check('chk_lead_source_type', sql`${table.type} IN ('instagram', 'google_ads', 'google_search', 'website', 'referral', 'walk_in', 'whatsapp', 'telegram', 'phone_call', 'other')`),
+    chkCategory: check('chk_lead_source_category', sql`${table.category} IN ('social', 'paid_ads', 'organic', 'referral', 'direct', 'messaging', 'other')`),
+}));
+
+export const leads = pgTable('leads', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firstName: varchar('first_name', { length: 100 }).notNull(),
+    lastName: varchar('last_name', { length: 100 }).notNull(),
+    phone: varchar('phone', { length: 20 }),
+    nationalId: varchar('national_id', { length: 10 }),
+
+    sourceId: uuid('source_id').references(() => leadSources.id),
+    campaignName: varchar('campaign_name', { length: 150 }),
+    utmSource: varchar('utm_source', { length: 100 }),
+    utmMedium: varchar('utm_medium', { length: 100 }),
+    utmCampaign: varchar('utm_campaign', { length: 100 }),
+    referrerUrl: text('referrer_url'),
+    landingUrl: text('landing_url'),
+
+    status: varchar('status', { length: 30 }).notNull().default('new'),
+    priority: varchar('priority', { length: 10 }).notNull().default('medium'),
+    tags: jsonb('tags').default([]).notNull(),
+
+    expectedServiceId: uuid('expected_service_id').references(() => procedureCodes.id),
+    expectedVisitTypeId: uuid('expected_visit_type_id').references(() => doctorVisitTypes.id),
+    expectedValue: decimal('expected_value', { precision: 12, scale: 2 }),
+
+    assignedStaffId: uuid('assigned_staff_id').references(() => users.id),
+    assignedDoctorId: uuid('assigned_doctor_id').references(() => users.id),
+
+    firstContactAt: timestamp('first_contact_at'),
+    lastContactAt: timestamp('last_contact_at'),
+    nextFollowUpAt: timestamp('next_follow_up_at'),
+    lastActivityAt: timestamp('last_activity_at'),
+
+    convertedPatientId: uuid('converted_patient_id').references(() => patients.id),
+    conversionDate: timestamp('conversion_date'),
+    convertedById: uuid('converted_by_id').references(() => users.id),
+    conversionNote: text('conversion_note'),
+
+    lostReason: varchar('lost_reason', { length: 30 }),
+    lostAt: timestamp('lost_at'),
+
+    note: text('note'),
+    marketingConsent: boolean('marketing_consent').default(false).notNull(),
+    marketingConsentAt: timestamp('marketing_consent_at'),
+
+    isDeleted: boolean('is_deleted').default(false).notNull(),
+    deletedAt: timestamp('deleted_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    statusIdx: index('idx_leads_status').on(table.status),
+    priorityIdx: index('idx_leads_priority').on(table.priority),
+    sourceIdx: index('idx_leads_source').on(table.sourceId),
+    staffIdx: index('idx_leads_assigned_staff').on(table.assignedStaffId),
+    doctorIdx: index('idx_leads_assigned_doctor').on(table.assignedDoctorId),
+    phoneIdx: index('idx_leads_phone').on(table.phone),
+    followUpIdx: index('idx_leads_next_follow_up').on(table.nextFollowUpAt),
+    createdIdx: index('idx_leads_created').on(table.createdAt),
+    tagsIdx: index('idx_leads_tags').using('gin', table.tags),
+    convertedPatientUq: uniqueIndex('uq_leads_converted_patient').on(table.convertedPatientId).where(sql`${table.convertedPatientId} IS NOT NULL`),
+    chkStatus: check('chk_lead_status', sql`${table.status} IN ('new', 'contacted', 'qualified', 'appointment_booked', 'visited', 'converted', 'lost')`),
+    chkPriority: check('chk_lead_priority', sql`${table.priority} IN ('low', 'medium', 'high')`),
+    chkLostReason: check('chk_lead_lost_reason', sql`${table.lostReason} IS NULL OR ${table.lostReason} IN ('not_interested', 'budget', 'competitor', 'unreachable', 'wrong_number', 'duplicate', 'other')`),
+}));
+
+export const leadActivities = pgTable('lead_activities', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    leadId: uuid('lead_id').notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    type: varchar('type', { length: 30 }).notNull(),
+    note: text('note'),
+    performedBy: uuid('performed_by').references(() => users.id),
+    oldStatus: varchar('old_status', { length: 30 }),
+    newStatus: varchar('new_status', { length: 30 }),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    leadIdx: index('idx_lead_activities_lead').on(table.leadId),
+    leadCreatedIdx: index('idx_lead_activities_lead_created').on(table.leadId, table.createdAt),
+    typeIdx: index('idx_lead_activities_type').on(table.type),
+    performedIdx: index('idx_lead_activities_performed').on(table.performedBy),
+    chkType: check('chk_lead_activity_type', sql`${table.type} IN ('created', 'contacted', 'note_added', 'status_changed', 'assigned', 'qualified', 'appointment_booked', 'visit_completed', 'converted', 'lost')`),
+}));
+
+export const leadNotes = pgTable('lead_notes', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    leadId: uuid('lead_id').notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    authorId: uuid('author_id').references(() => users.id),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    leadIdx: index('idx_lead_notes_lead').on(table.leadId),
 }));

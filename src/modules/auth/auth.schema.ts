@@ -13,6 +13,7 @@ export const RegisterSchema = z.object({
     .regex(/^09\d{9}$/, 'Phone must start with 09 and be 11 digits'),
   fullName: z.string().min(2, 'Full name must be at least 2 characters'),
   role: z.enum(['admin_doctor', 'doctor', 'lab', 'pharmacy', 'patient']),
+  organizationName: z.string().min(1, 'Organization name is required').optional(),
   password: z.string()
     .min(8, 'Password must be at least 8 characters')
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')

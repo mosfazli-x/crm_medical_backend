@@ -98,9 +98,9 @@ describe('Patients API', () => {
   })
 
   describe('DELETE /api/patients/:id', () => {
-    it('should reject without auth (returns 400 due to param validation)', async () => {
+    it('should reject without auth', async () => {
       const { status } = await api.delete('/api/patients/some-id')
-      expect(status).toBe(400)
+      expect(status).toBe(401)
     })
   })
 })

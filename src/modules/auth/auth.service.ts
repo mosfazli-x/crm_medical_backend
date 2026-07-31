@@ -1,6 +1,7 @@
 import type { DB } from '../../db/client'
 import { users, otpCodes } from '../../db/schema'
 import { and, eq, gt, isNull, sql, ne } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
 import { ConflictError, UnauthorizedError, ForbiddenError, NotFoundError, TooManyRequestsError, ValidationError } from '../../shared/errors'
 
 const BLOCKED_SELF_REGISTRATION_ROLES = ['clinic_staff']
@@ -10,6 +11,10 @@ import type { LoginDto, RegisterDto, ForgotPasswordDto, ResetPasswordDto, Update
 import bcrypt from 'bcrypt'
 
 const SALT_ROUNDS = 12
+
+function hashOtpCode(code: string): string {
+  return createHash('sha256').update(code).digest('hex')
+}
 
 export class AuthService {
   constructor(private db: DB) { }
@@ -71,6 +76,7 @@ export class AuthService {
           fullName: dto.fullName,
           passwordHash,
           role: dto.role,
+          organizationName: dto.organizationName,
           phoneConfirmed: dto.role === 'patient',
           status: dto.role === 'patient' ? 'approved' : 'pending',
           requiresPasswordChange: false,
@@ -272,7 +278,7 @@ export class AuthService {
 
     await this.db.insert(otpCodes).values({
       phone: dto.phone,
-      code,
+      code: hashOtpCode(code),
       type: 'password_reset',
       expiresAt,
     })
@@ -293,7 +299,7 @@ export class AuthService {
       .where(
         and(
           eq(otpCodes.phone, dto.phone),
-          eq(otpCodes.code, dto.code),
+          eq(otpCodes.code, hashOtpCode(dto.code)),
           eq(otpCodes.type, 'password_reset'),
           isNull(otpCodes.usedAt),
           gt(otpCodes.expiresAt, new Date()),

@@ -59,9 +59,9 @@ describe('Messaging API', () => {
   })
 
   describe('PATCH /api/messaging/:id/read', () => {
-    it('should reject without auth (returns 400 due to param validation)', async () => {
+    it('should reject without auth', async () => {
       const { status } = await api.patch('/api/messaging/test-id/read')
-      expect(status).toBe(400)
+      expect(status).toBe(401)
     })
   })
 })
