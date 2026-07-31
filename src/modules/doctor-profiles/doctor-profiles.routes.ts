@@ -23,4 +23,9 @@ export async function doctorProfileRoutes(fastify: FastifyInstance) {
     { preHandler: requireRole('admin_doctor') },
     (req, rep) => controller.uploadPhoto(req, rep)
   )
+
+  fastify.get<{ Params: { doctorId: string } }>(
+    '/:doctorId/photo',
+    (req, rep) => controller.servePhoto(req, rep)
+  )
 }

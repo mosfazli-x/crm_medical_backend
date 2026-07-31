@@ -1,7 +1,24 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { DoctorProfileService } from './doctor-profiles.service'
 import { UpsertDoctorProfileSchema } from './doctor-profiles.schema'
-import { ValidationError } from '../../shared/errors'
+import { NotFoundError, ValidationError } from '../../shared/errors'
+import { fileService } from '../../shared/services'
+import { env } from '../../config/env'
+
+const PHOTO_EXT_TO_MIME: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+}
+
+function photoContentType(name: string): string {
+  const dot = name.lastIndexOf('.')
+  const ext = dot >= 0 ? name.slice(dot).toLowerCase() : ''
+  return PHOTO_EXT_TO_MIME[ext] || 'image/*'
+}
 
 export class DoctorProfileController {
   constructor(private doctorProfileService: DoctorProfileService) {}
@@ -46,5 +63,39 @@ export class DoctorProfileController {
     } finally {
       part.file.destroy()
     }
+  }
+
+  async servePhoto(request: FastifyRequest<{ Params: { doctorId: string } }>, reply: FastifyReply) {
+    const { doctorId } = request.params
+    const profile = await this.doctorProfileService.findByDoctorId(doctorId)
+
+    if (!profile?.photoUrl) {
+      throw new NotFoundError('Photo')
+    }
+
+    const storageTarget = profile.photoUrl.replace(/^\/uploads\//, '')
+
+    if (env.STORAGE_DRIVER === 's3') {
+      const presignedUrl = await fileService.getPresignedUrl(storageTarget, env.PRESIGNED_URL_EXPIRY)
+      if (!presignedUrl) {
+        throw new NotFoundError('Photo')
+      }
+      return reply.redirect(presignedUrl, 302)
+    }
+
+    const { createReadStream } = await import('node:fs')
+    const { stat } = await import('node:fs/promises')
+    const absolutePath = fileService.getAbsolutePath(storageTarget)
+
+    try {
+      await stat(absolutePath)
+    } catch {
+      throw new NotFoundError('Photo')
+    }
+
+    const stream = createReadStream(absolutePath)
+    reply.header('Content-Type', photoContentType(storageTarget))
+    reply.header('Cache-Control', 'public, max-age=86400')
+    return reply.send(stream)
   }
 }

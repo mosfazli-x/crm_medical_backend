@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 import { ConflictError, NotFoundError } from '../../shared/errors'
 import { fileService } from '../../shared/services'
 import type { FileMetadata } from '../../shared/services/file.service'
+import { env } from '../../config/env'
 import type { UpsertDoctorProfileDto } from './doctor-profiles.schema'
 
 export class DoctorProfileService {
@@ -48,6 +49,11 @@ export class DoctorProfileService {
   async savePhoto(doctorId: string, originalName: string, buffer: Buffer): Promise<FileMetadata> {
     await this.ensureDoctor(doctorId)
 
+    const [existing] = await this.db
+      .select({ photoUrl: doctorProfiles.photoUrl })
+      .from(doctorProfiles)
+      .where(eq(doctorProfiles.doctorId, doctorId))
+
     const metadata = await fileService.saveFile(
       `doctors/${doctorId}`,
       'photo',
@@ -68,6 +74,12 @@ export class DoctorProfileService {
         target: doctorProfiles.doctorId,
         set: { photoUrl: metadata.publicPath, updatedAt: new Date() },
       })
+
+    if (existing?.photoUrl && existing.photoUrl !== metadata.publicPath) {
+      const oldKey = existing.photoUrl.replace(/^\/uploads\//, '')
+      const target = env.STORAGE_DRIVER === 's3' ? oldKey : fileService.getAbsolutePath(oldKey)
+      await fileService.deleteFile(target)
+    }
 
     return metadata
   }

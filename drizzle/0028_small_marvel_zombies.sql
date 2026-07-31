@@ -1,0 +1,1 @@
+ALTER TABLE "doctor_profiles" ADD COLUMN "show_on_landing" boolean DEFAULT true NOT NULL;
