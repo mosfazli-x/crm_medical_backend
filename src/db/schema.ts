@@ -711,6 +711,7 @@ export const doctorProfiles = pgTable('doctor_profiles', {
     patientsCount: integer('patients_count'),
     rating: decimal('rating', { precision: 3, scale: 1 }),
     sortOrder: integer('sort_order').default(0).notNull(),
+    showOnLanding: boolean('show_on_landing').default(true).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({

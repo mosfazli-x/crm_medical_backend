@@ -87,7 +87,7 @@ export class BookingService {
       })
       .from(users)
       .leftJoin(doctorProfiles, eq(doctorProfiles.doctorId, users.id))
-      .where(and(eq(users.role, 'doctor'), eq(users.status, 'approved')))
+      .where(and(eq(users.role, 'doctor'), eq(users.status, 'approved'), eq(doctorProfiles.showOnLanding, true)))
       .orderBy(sql`${doctorProfiles.sortOrder} ASC NULLS LAST`, users.fullName)
   }
 
@@ -123,11 +123,13 @@ export class BookingService {
     const bookedTimes = new Set(existingAppointments.map((a) => a.startTime))
 
     const slots: { startTime: string; endTime: string }[] = []
+    const seenTimes = new Set<string>()
 
     for (const avail of availabilityRows) {
       const slotsInRange = this.generateTimeSlots(avail.startTime, avail.endTime, 15)
       for (const slot of slotsInRange) {
-        if (!bookedTimes.has(slot.startTime)) {
+        if (!bookedTimes.has(slot.startTime) && !seenTimes.has(slot.startTime)) {
+          seenTimes.add(slot.startTime)
           slots.push(slot)
         }
       }

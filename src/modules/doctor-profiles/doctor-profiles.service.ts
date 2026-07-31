@@ -29,6 +29,7 @@ export class DoctorProfileService {
       patientsCount: dto.patientsCount ?? null,
       rating: dto.rating != null ? String(dto.rating) : null,
       sortOrder: dto.sortOrder ?? 0,
+      showOnLanding: dto.showOnLanding ?? true,
       updatedAt: new Date(),
     }
 
