@@ -17,7 +17,7 @@ export async function prescriptionRoutes(fastify: FastifyInstance) {
 
   fastify.put<{ Params: { id: string } }>('/:id', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.update(req, rep))
 
-  fastify.post<{ Params: { id: string } }>('/:id/discontinue', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.discontinue(req, rep))
+  fastify.post<{ Params: { id: string }; Body: { reason?: string } }>('/:id/discontinue', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.discontinue(req, rep))
 
   fastify.delete<{ Params: { id: string } }>('/:id', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.delete(req, rep))
 }
