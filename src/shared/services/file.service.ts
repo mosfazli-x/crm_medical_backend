@@ -96,6 +96,15 @@ export class FileService {
     originalName: string,
     buffer: Buffer
   ): Promise<FileMetadata> {
+    return this.saveFile(path.join('patients', patientId), fileType, originalName, buffer)
+  }
+
+  async saveFile(
+    folderPath: string,
+    fileType: string,
+    originalName: string,
+    buffer: Buffer
+  ): Promise<FileMetadata> {
     const mimeType = this.detectMimeType(buffer, originalName)
     if (!this.isAllowedMimeType(mimeType)) {
       throw new Error(`File type ${mimeType} is not allowed. Allowed: ${this.getAllowedMimeTypes().join(', ')}`)
@@ -109,7 +118,7 @@ export class FileService {
     const savedName = this.generateFilename(originalName)
 
     if (this.driver === 's3' && this.s3Provider) {
-      const result = await this.s3Provider.saveFile(patientId, fileType, originalName, buffer)
+      const result = await this.s3Provider.saveFile(folderPath, fileType, originalName, buffer)
       return {
         originalName: result.originalName,
         savedName: result.savedName,
@@ -122,15 +131,16 @@ export class FileService {
       }
     }
 
-    const relativePath = path.join('patients', patientId, fileType, savedName)
-    const targetDir = path.join(this.baseDir, 'patients', patientId, fileType)
+    const normalizedFolder = folderPath.replace(/\\/g, '/')
+    const relativePath = path.join(normalizedFolder, fileType, savedName)
+    const targetDir = path.join(this.baseDir, normalizedFolder, fileType)
     const absolutePath = path.join(targetDir, savedName)
 
     await fs.mkdir(targetDir, { recursive: true })
     await fs.writeFile(absolutePath, buffer)
 
     if (this.backupDir) {
-      await this.backupLocalFile(buffer, patientId, fileType, savedName)
+      await this.backupLocalFile(buffer, normalizedFolder, fileType, savedName)
     }
 
     return {
@@ -145,13 +155,13 @@ export class FileService {
     }
   }
 
-  private async backupLocalFile(buffer: Buffer, patientId: string, fileType: string, savedName: string): Promise<void> {
+  private async backupLocalFile(buffer: Buffer, folderPath: string, fileType: string, savedName: string): Promise<void> {
     try {
-      const backupDir = path.join(this.backupDir!, 'patients', patientId, fileType)
+      const backupDir = path.join(this.backupDir!, folderPath, fileType)
       await fs.mkdir(backupDir, { recursive: true })
       await fs.writeFile(path.join(backupDir, savedName), buffer)
     } catch (error) {
-      console.error(`Backup failed for ${patientId}/${fileType}/${savedName}:`, error)
+      console.error(`Backup failed for ${folderPath}/${fileType}/${savedName}:`, error)
     }
   }
 

@@ -96,12 +96,12 @@ export class S3StorageProvider {
     return createHash('sha256').update(buffer).digest('hex')
   }
 
-  buildKey(patientId: string, fileType: string, savedName: string): string {
-    return `patients/${patientId}/${fileType}/${savedName}`
+  buildKey(folderPath: string, fileType: string, savedName: string): string {
+    return `${folderPath.replace(/\\/g, '/')}/${fileType}/${savedName}`
   }
 
   async saveFile(
-    patientId: string,
+    folderPath: string,
     fileType: string,
     originalName: string,
     buffer: Buffer
@@ -117,7 +117,7 @@ export class S3StorageProvider {
 
     const fileHash = this.computeHash(buffer)
     const savedName = this.generateFilename(originalName)
-    const key = this.buildKey(patientId, fileType, savedName)
+    const key = this.buildKey(folderPath, fileType, savedName)
 
     await this.client.send(
       new PutObjectCommand({
@@ -128,7 +128,7 @@ export class S3StorageProvider {
         Metadata: {
           originalName,
           fileHash,
-          patientId,
+          folderPath,
           fileType,
         },
       })

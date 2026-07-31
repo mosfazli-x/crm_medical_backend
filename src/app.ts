@@ -88,6 +88,7 @@ export async function buildApp() {
   await app.register(prescriptionRoutes, { prefix: '/api/prescriptions' })
   await app.register(labOrderItemsRoutes, { prefix: '/api/lab-order-items' })
   await app.register(bookingRoutes, { prefix: '/api/booking' })
+  await app.register(doctorProfileRoutes, { prefix: '/api/doctor-profiles' })
   await app.register(accountingRoutes, { prefix: '/api/accounting' })
   await app.register(inventoryRoutes, { prefix: '/api/inventory' })
 
@@ -130,6 +131,7 @@ import { auditRoutes } from './modules/audit'
 import { prescriptionRoutes } from './modules/prescriptions'
 import { labOrderItemsRoutes } from './modules/lab-order-items'
 import { bookingRoutes } from './modules/booking'
+import { doctorProfileRoutes } from './modules/doctor-profiles'
 import { accountingRoutes } from './modules/accounting'
 import { inventoryRoutes } from './modules/inventory'
 import { SettingsService } from './modules/settings'

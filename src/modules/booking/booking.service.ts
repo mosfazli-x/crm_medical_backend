@@ -1,5 +1,5 @@
 import type { DB } from '../../db/client'
-import { doctorVisitTypes, users, doctorAvailability, appointments } from '../../db/schema'
+import { doctorVisitTypes, users, doctorAvailability, appointments, doctorProfiles } from '../../db/schema'
 import { and, eq, sql } from 'drizzle-orm'
 import { ConflictError } from '../../shared/errors'
 import type { BookAppointmentDto } from './booking.schema'
@@ -77,10 +77,18 @@ export class BookingService {
       .select({
         id: users.id,
         fullName: users.fullName,
+        specialty: doctorProfiles.specialty,
+        bio: doctorProfiles.bio,
+        photoUrl: doctorProfiles.photoUrl,
+        experienceYears: doctorProfiles.experienceYears,
+        patientsCount: doctorProfiles.patientsCount,
+        rating: doctorProfiles.rating,
+        sortOrder: doctorProfiles.sortOrder,
       })
       .from(users)
+      .leftJoin(doctorProfiles, eq(doctorProfiles.doctorId, users.id))
       .where(and(eq(users.role, 'doctor'), eq(users.status, 'approved')))
-      .orderBy(users.fullName)
+      .orderBy(sql`${doctorProfiles.sortOrder} ASC NULLS LAST`, users.fullName)
   }
 
   async getAvailableSlots(doctorId: string, dateStr: string) {

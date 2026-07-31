@@ -700,6 +700,23 @@ export const clinicSettings = pgTable('clinic_settings', {
     keyIdx: sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_settings_key ON clinic_settings(key)`,
 }));
 
+// ─── Doctor Profiles (public landing-page profiles) ───
+
+export const doctorProfiles = pgTable('doctor_profiles', {
+    doctorId: uuid('doctor_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+    specialty: varchar('specialty', { length: 255 }),
+    bio: text('bio'),
+    photoUrl: text('photo_url'),
+    experienceYears: integer('experience_years'),
+    patientsCount: integer('patients_count'),
+    rating: decimal('rating', { precision: 3, scale: 1 }),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    sortIdx: sql`CREATE INDEX IF NOT EXISTS idx_doctor_profiles_sort ON doctor_profiles(sort_order)`,
+}));
+
 // ─── Accounting Module ───
 
 export const chartOfAccounts = pgTable('chart_of_accounts', {
