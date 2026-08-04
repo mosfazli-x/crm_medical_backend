@@ -1,8 +1,9 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { DashboardService } from './dashboard.service'
+import { InventoryService } from '../inventory'
 
 export class DashboardController {
-  constructor(private service: DashboardService) {}
+  constructor(private service: DashboardService, private inventoryService: InventoryService) {}
 
   async index(request: FastifyRequest, reply: FastifyReply) {
     const { role, id, patientId } = request.user
@@ -16,6 +17,22 @@ export class DashboardController {
     }
 
     const data = await this.service.getDashboard()
+
+    if (role === 'admin_doctor' || role === 'pharmacy') {
+      const items = await this.inventoryService.getLowStockProducts()
+      data.low_stock = {
+        count: items.length,
+        items: items.map(({ id, name, sku, currentStock, minStockLevel, unit }) => ({
+          id,
+          name,
+          sku,
+          currentStock,
+          minStockLevel,
+          unit,
+        })),
+      }
+    }
+
     return reply.send({ success: true, data })
   }
 }

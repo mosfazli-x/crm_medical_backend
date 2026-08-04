@@ -38,6 +38,17 @@ export const DashboardResponseSchema = z.object({
     total_revenue: z.number(),
     pending_revenue: z.number(),
   }),
+  low_stock: z.object({
+    count: z.number(),
+    items: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      sku: z.string().nullable(),
+      currentStock: z.string().nullable(),
+      minStockLevel: z.string().nullable(),
+      unit: z.string(),
+    })),
+  }).optional(),
 })
 
 export const PatientDashboardResponseSchema = z.object({

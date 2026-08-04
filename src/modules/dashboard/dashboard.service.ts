@@ -4,11 +4,12 @@ import { sql, eq, and, desc } from 'drizzle-orm'
 import { smsService, fileService } from '../../shared/services'
 import { NotFoundError } from '../../shared/errors'
 import { getInsuranceInfo } from '../../shared/constants/insurance'
+import type { DashboardResponse } from './dashboard.schema'
 
 export class DashboardService {
   constructor(private db: DB) {}
 
-  async getDashboard() {
+  async getDashboard(): Promise<DashboardResponse> {
     const [smsCredit, storage, patientStats, appointmentStats, messageStats, visitStats, billingStats] =
       await Promise.all([
         this.getSmsCredit(),

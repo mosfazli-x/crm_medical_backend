@@ -821,6 +821,25 @@ export const stockMovements = pgTable('stock_movements', {
     performedIdx: sql`CREATE INDEX IF NOT EXISTS idx_stock_movements_performed ON stock_movements(performed_at)`,
 }));
 
+export const patientItemUsages = pgTable('patient_item_usages', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+    productId: uuid('product_id').notNull().references(() => products.id, { onDelete: 'cascade' }),
+    visitId: uuid('visit_id').references(() => visits.id, { onDelete: 'set null' }),
+    quantity: decimal('quantity', { precision: 12, scale: 3 }).notNull(),
+    unitPrice: decimal('unit_price', { precision: 12, scale: 2 }),
+    totalPrice: decimal('total_price', { precision: 15, scale: 2 }),
+    performedById: uuid('performed_by_id').notNull().references(() => users.id),
+    notes: text('notes'),
+    usedAt: timestamp('used_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    patientIdx: index('idx_patient_item_usages_patient').on(table.patientId),
+    productIdx: index('idx_patient_item_usages_product').on(table.productId),
+    usedAtIdx: index('idx_patient_item_usages_used_at').on(table.usedAt),
+}));
+
 export const leadSources = pgTable('lead_sources', {
     id: uuid('id').primaryKey().defaultRandom(),
     name: varchar('name', { length: 100 }).notNull(),

@@ -91,6 +91,7 @@ export async function buildApp() {
   await app.register(doctorProfileRoutes, { prefix: '/api/doctor-profiles' })
   await app.register(accountingRoutes, { prefix: '/api/accounting' })
   await app.register(inventoryRoutes, { prefix: '/api/inventory' })
+  await app.register(patientUsageRoutes, { prefix: '/api/patient-usage' })
   await app.register(leadSourcesRoutes, { prefix: '/api/lead-sources' })
   await app.register(leadsRoutes, { prefix: '/api/leads' })
   await app.register(dailyReportsRoutes, { prefix: '/api/daily-reports' })
@@ -146,6 +147,7 @@ import { bookingRoutes } from './modules/booking'
 import { doctorProfileRoutes } from './modules/doctor-profiles'
 import { accountingRoutes } from './modules/accounting'
 import { inventoryRoutes } from './modules/inventory'
+import { patientUsageRoutes } from './modules/patient-usage'
 import { leadSourcesRoutes, LeadSourcesService } from './modules/lead-sources'
 import { leadsRoutes } from './modules/leads'
 import { dailyReportsRoutes, DailyReportsService } from './modules/daily-reports'
