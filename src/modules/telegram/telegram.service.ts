@@ -15,7 +15,7 @@ const ROLE_NAMES: Record<string, string> = {
 export class TelegramBotService {
   constructor(private db: DB) {}
 
-  async generateLinkCode(userId: string): Promise<string> {
+  async generateLinkCode(userId: string): Promise<{ code: string; botUsername: string | null; expiresInMinutes: number }> {
     const [existing] = await this.db
       .select()
       .from(telegramLinks)
@@ -35,7 +35,13 @@ export class TelegramBotService {
       expiresAt,
     })
 
-    return code
+    const botUsername = await telegramService.getBotUsername()
+
+    return {
+      code,
+      botUsername,
+      expiresInMinutes: 10,
+    }
   }
 
   async unlink(userId: string): Promise<void> {
@@ -155,18 +161,28 @@ export class TelegramBotService {
 
     switch (command) {
       case '/start': {
+        if (args.length > 0) {
+          const code = args[0]
+          try {
+            const name = await this.processLinkCode(code, chatId, userInfo)
+            await telegramService.sendMessage(chatId,
+              `🎉 حساب تلگرام شما با موفقیت به پنل کاربری "${name}" متصل شد!\n\n`
+              + 'از این پس نوتیفیکیشن‌ها و پیام‌های مهم کلینیک را مستقیماً از طریق تلگرام دریافت خواهید کرد.'
+            )
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : 'خطا در اتصال حساب تلگرام.'
+            await telegramService.sendMessage(chatId, `⚠️ ${msg}`)
+          }
+          break
+        }
+
         const linked = await this.isChatLinked(chatId)
         if (linked) {
           await telegramService.sendMessage(chatId, 'حساب تلگرام شما قبلاً به پنل کاربری متصل شده است. برای اطلاعات بیشتر از /profile استفاده کنید.')
         } else {
           await telegramService.sendMessage(chatId,
-            'به ربات کلینیک تخصصی دکتر حسینی خوش آمدید.\n\n'
-            + 'برای اتصال حساب کاربری خود، مراحل زیر را انجام دهید:\n'
-            + '1️⃣ وارد پنل کاربری خود شوید\n'
-            + '2️⃣ به بخش تنظیمات پروفایل بروید\n'
-            + '3️⃣ گزینه اتصال تلگرام را انتخاب کنید\n'
-            + '4️⃣ کد تولید شده را با دستور /link <کد> ارسال کنید\n\n'
-            + 'راهنما: /help'
+            'به ربات رسمی کلینیک تخصصی دکتر حسینی خوش آمدید. 🏥\n\n'
+            + 'برای اتصال آسان حساب کاربری خود به پنل، کافی است در پروفایل خود در وب‌سایت روی دکمه **"اتصال مستقیم با تلگرام"** کلیک کنید.'
           )
         }
         break

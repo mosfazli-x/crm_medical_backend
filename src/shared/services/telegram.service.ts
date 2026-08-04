@@ -4,6 +4,26 @@ import { env } from '../../config/env'
 export class TelegramService {
   private baseUrl: string | null = null
   private botToken: string | null = null
+  private botUsername: string | null = null
+
+  async getBotUsername(): Promise<string | null> {
+    if (this.botUsername) return this.botUsername
+    if (env.TELEGRAM_BOT_USERNAME) {
+      this.botUsername = env.TELEGRAM_BOT_USERNAME
+      return this.botUsername
+    }
+    try {
+      const api = this.getApi()
+      const res = await axios.get(`${api}/getMe`, { timeout: 10000 })
+      if (res.data?.ok && res.data?.result?.username) {
+        this.botUsername = res.data.result.username
+        return this.botUsername
+      }
+    } catch (error) {
+      console.error('Telegram getMe failed:', error instanceof Error ? error.message : error)
+    }
+    return null
+  }
 
   private getApi(): string {
     if (!this.botToken) {

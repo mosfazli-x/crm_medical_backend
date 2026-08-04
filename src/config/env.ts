@@ -21,6 +21,7 @@ const envSchema = z.object({
   SMS_API_BASE_URL: z.string().url().default('https://api.sms.ir/v1/send'),
 
   TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_BOT_USERNAME: z.string().optional(),
   TELEGRAM_WEBHOOK_URL: z.string().optional(),
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
 
