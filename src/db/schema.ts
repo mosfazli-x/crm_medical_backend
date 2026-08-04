@@ -930,3 +930,36 @@ export const leadNotes = pgTable('lead_notes', {
 }, (table) => ({
     leadIdx: index('idx_lead_notes_lead').on(table.leadId),
 }));
+
+export const dailyReports = pgTable('daily_reports', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reportDate: date('report_date').notNull(),
+    patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+    visitTypes: jsonb('visit_types').default([]),
+    procedures: jsonb('procedures').default([]),
+    otherProcedureText: varchar('other_procedure_text', { length: 500 }),
+    feeCollected: decimal('fee_collected', { precision: 12, scale: 2 }),
+    paymentMethod: varchar('payment_method', { length: 30 }).default('cash'),
+    notes: text('notes'),
+    recordedById: uuid('recorded_by_id').references(() => users.id),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    reportDateIdx: sql`CREATE INDEX IF NOT EXISTS idx_daily_reports_date ON daily_reports(report_date)`,
+    patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_daily_reports_patient ON daily_reports(patient_id)`,
+}));
+
+export const dailyReportVisitTypes = pgTable('daily_report_visit_types', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 100 }).notNull(),
+    description: text('description'),
+    price: decimal('price', { precision: 12, scale: 2 }),
+    color: varchar('color', { length: 20 }),
+    isActive: boolean('is_active').default(true).notNull(),
+    isDeleted: boolean('is_deleted').default(false).notNull(),
+    deletedAt: timestamp('deleted_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    nameIdx: sql`CREATE INDEX IF NOT EXISTS idx_daily_report_visit_types_name ON daily_report_visit_types(name)`,
+}));

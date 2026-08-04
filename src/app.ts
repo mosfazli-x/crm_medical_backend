@@ -93,10 +93,15 @@ export async function buildApp() {
   await app.register(inventoryRoutes, { prefix: '/api/inventory' })
   await app.register(leadSourcesRoutes, { prefix: '/api/lead-sources' })
   await app.register(leadsRoutes, { prefix: '/api/leads' })
+  await app.register(dailyReportsRoutes, { prefix: '/api/daily-reports' })
 
   // Seed default lead sources
   const leadSourcesSvc = new LeadSourcesService((app as any).db)
   await leadSourcesSvc.ensureDefaults()
+
+  // Seed default daily-report visit types
+  const dailyReportsSvc = new DailyReportsService((app as any).db)
+  await dailyReportsSvc.ensureDefaults()
 
   app.get('/health', async (_, reply) => {
     try {
@@ -142,4 +147,5 @@ import { accountingRoutes } from './modules/accounting'
 import { inventoryRoutes } from './modules/inventory'
 import { leadSourcesRoutes, LeadSourcesService } from './modules/lead-sources'
 import { leadsRoutes } from './modules/leads'
+import { dailyReportsRoutes, DailyReportsService } from './modules/daily-reports'
 import { SettingsService } from './modules/settings'
