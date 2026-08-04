@@ -963,3 +963,29 @@ export const dailyReportVisitTypes = pgTable('daily_report_visit_types', {
 }, (table) => ({
     nameIdx: sql`CREATE INDEX IF NOT EXISTS idx_daily_report_visit_types_name ON daily_report_visit_types(name)`,
 }));
+
+// ─── Schedule (Task Management) Module ───
+
+export const clinicTasks = pgTable('clinic_tasks', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    title: varchar('title', { length: 300 }).notNull(),
+    description: text('description'),
+    assigneeId: uuid('assignee_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    createdById: uuid('created_by_id').notNull().references(() => users.id),
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    priority: varchar('priority', { length: 10 }).notNull().default('medium'),
+    dueDate: varchar('due_date', { length: 10 }),
+    notes: text('notes'),
+    completedAt: timestamp('completed_at'),
+    cancelledAt: timestamp('cancelled_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    assigneeIdx: index('idx_clinic_tasks_assignee').on(table.assigneeId),
+    statusIdx: index('idx_clinic_tasks_status').on(table.status),
+    dueDateIdx: index('idx_clinic_tasks_due_date').on(table.dueDate),
+    createdIdx: index('idx_clinic_tasks_created').on(table.createdAt),
+    assigneeStatusIdx: index('idx_clinic_tasks_assignee_status').on(table.assigneeId, table.status),
+    chkStatus: check('chk_clinic_task_status', sql`${table.status} IN ('pending', 'in_progress', 'done', 'cancelled')`),
+    chkPriority: check('chk_clinic_task_priority', sql`${table.priority} IN ('low', 'medium', 'high')`),
+}));
