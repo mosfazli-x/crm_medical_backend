@@ -55,8 +55,7 @@ export class TelegramBotService {
     }
   }
 
-  async getStatus(userId: string): Promise<{ linked: boolean; username: string | null; firstName: string | null }> {
-    const [link] = await this.db
+  async getStatus(userId: string): Promise<{ linked: boolean; username: string | null; firstName: string | null }> {    const [link] = await this.db
       .select()
       .from(telegramLinks)
       .where(eq(telegramLinks.userId, userId))
@@ -64,6 +63,19 @@ export class TelegramBotService {
 
     if (!link) return { linked: false, username: null, firstName: null }
     return { linked: true, username: link.username, firstName: link.firstName }
+  }
+
+  async setMenuButton(): Promise<{ ok: boolean; miniAppUrl: string | null; reason?: string }> {
+    const miniAppUrl = telegramService.getMiniAppUrl()
+    if (!miniAppUrl) {
+      return { ok: false, miniAppUrl: null, reason: 'not-configured' }
+    }
+    const ok = await telegramService.setChatMenuButton({
+      type: 'web_app',
+      text: 'رزرو نوبت',
+      url: miniAppUrl,
+    })
+    return { ok, miniAppUrl, reason: ok ? undefined : 'api-failed' }
   }
 
   async processLinkCode(code: string, chatId: string, userInfo: { username?: string; firstName?: string; lastName?: string }): Promise<string> {
@@ -177,13 +189,23 @@ export class TelegramBotService {
         }
 
         const linked = await this.isChatLinked(chatId)
+        const miniAppUrl = telegramService.getMiniAppUrl()
+
         if (linked) {
-          await telegramService.sendMessage(chatId, 'حساب تلگرام شما قبلاً به پنل کاربری متصل شده است. برای اطلاعات بیشتر از /profile استفاده کنید.')
+          const text = 'حساب تلگرام شما قبلاً به پنل کاربری متصل شده است. برای اطلاعات بیشتر از /profile استفاده کنید.'
+          if (miniAppUrl) {
+            await telegramService.sendMessageWithButton(chatId, text, '🗓 رزرو نوبت آنلاین', miniAppUrl)
+          } else {
+            await telegramService.sendMessage(chatId, text)
+          }
         } else {
-          await telegramService.sendMessage(chatId,
-            'به ربات رسمی کلینیک تخصصی دکتر حسینی خوش آمدید. 🏥\n\n'
+          const text = 'به ربات رسمی کلینیک تخصصی دکتر حسینی خوش آمدید. 🏥\n\n'
             + 'برای اتصال آسان حساب کاربری خود به پنل، کافی است در پروفایل خود در وب‌سایت روی دکمه **"اتصال مستقیم با تلگرام"** کلیک کنید.'
-          )
+          if (miniAppUrl) {
+            await telegramService.sendMessageWithButton(chatId, text, '🗓 رزرو نوبت آنلاین', miniAppUrl)
+          } else {
+            await telegramService.sendMessage(chatId, text)
+          }
         }
         break
       }

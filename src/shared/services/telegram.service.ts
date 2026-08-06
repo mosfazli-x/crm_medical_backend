@@ -49,6 +49,51 @@ export class TelegramService {
     }
   }
 
+  async sendMessageWithButton(
+    chatId: number | string,
+    text: string,
+    buttonText: string,
+    url: string,
+    parseMode?: 'HTML' | 'Markdown'
+  ): Promise<boolean> {
+    try {
+      const api = this.getApi()
+      const params: Record<string, unknown> = {
+        chat_id: chatId,
+        text,
+        reply_markup: {
+          inline_keyboard: [[{ text: buttonText, web_app: { url } }]],
+        },
+      }
+      if (parseMode) params.parse_mode = parseMode
+      const response = await axios.post(`${api}/sendMessage`, params, { timeout: 10000 })
+      return response.status === 200
+    } catch (error) {
+      console.error('Telegram sendMessageWithButton failed:', error instanceof Error ? error.message : error)
+      return false
+    }
+  }
+
+  async setChatMenuButton(menuButton: { type: string; text?: string; url?: string }): Promise<boolean> {
+    try {
+      const api = this.getApi()
+      const response = await axios.post(`${api}/setChatMenuButton`, { menu_button: menuButton }, { timeout: 10000 })
+      return response.status === 200
+    } catch (error) {
+      console.error('Telegram setChatMenuButton failed:', error instanceof Error ? error.message : error)
+      return false
+    }
+  }
+
+  getMiniAppUrl(): string | null {
+    if (env.TELEGRAM_MINIAPP_URL) return env.TELEGRAM_MINIAPP_URL
+    if (env.TELEGRAM_WEBHOOK_URL) {
+      const base = env.TELEGRAM_WEBHOOK_URL.replace(/\/+$/, '').replace(/\/api\/telegram\/webhook$/, '')
+      return `${base}/tg`
+    }
+    return null
+  }
+
   async setWebhook(): Promise<boolean> {
     try {
       const api = this.getApi()

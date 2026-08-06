@@ -12,4 +12,5 @@ export async function telegramRoutes(fastify: FastifyInstance) {
   fastify.post('/generate-link-code', { preHandler: authenticate }, controller.generateLinkCode.bind(controller))
   fastify.get('/status', { preHandler: authenticate }, controller.getStatus.bind(controller))
   fastify.post('/unlink', { preHandler: authenticate }, controller.unlink.bind(controller))
+  fastify.post('/menu-button', { preHandler: authenticate }, controller.setMenuButton.bind(controller))
 }

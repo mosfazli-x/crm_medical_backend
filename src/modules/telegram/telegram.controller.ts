@@ -28,6 +28,17 @@ export class TelegramController {
     return reply.send({ success: true, message: 'حساب تلگرام با موفقیت جدا شد.' })
   }
 
+  async setMenuButton(_request: FastifyRequest, reply: FastifyReply) {
+    const result = await this.botService.setMenuButton()
+    if (!result.ok) {
+      const error = result.reason === 'not-configured'
+        ? 'TELEGRAM_MINIAPP_URL or TELEGRAM_WEBHOOK_URL not configured. Mini-app menu button cannot be set.'
+        : 'Failed to reach Telegram API. Menu button was not updated.'
+      return reply.status(400).send({ success: false, error, miniAppUrl: result.miniAppUrl })
+    }
+    return reply.send({ success: true, data: { mini_app_url: result.miniAppUrl } })
+  }
+
   async webhook(request: FastifyRequest, reply: FastifyReply) {
     if (!telegramService.isConfigured()) {
       return reply.status(200).send({ ok: true })

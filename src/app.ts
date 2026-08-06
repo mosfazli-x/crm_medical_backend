@@ -96,6 +96,7 @@ export async function buildApp() {
   await app.register(leadsRoutes, { prefix: '/api/leads' })
   await app.register(dailyReportsRoutes, { prefix: '/api/daily-reports' })
   await app.register(scheduleRoutes, { prefix: '/api/schedule' })
+  await app.register(miniAppRoutes, { prefix: '/api/miniapp' })
 
   // Seed default lead sources
   const leadSourcesSvc = new LeadSourcesService((app as any).db)
@@ -152,4 +153,5 @@ import { leadSourcesRoutes, LeadSourcesService } from './modules/lead-sources'
 import { leadsRoutes } from './modules/leads'
 import { dailyReportsRoutes, DailyReportsService } from './modules/daily-reports'
 import { scheduleRoutes } from './modules/schedule'
+import { miniAppRoutes } from './modules/miniapp'
 import { SettingsService } from './modules/settings'

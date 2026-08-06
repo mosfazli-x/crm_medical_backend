@@ -1,0 +1,1 @@
+auth_date=1786050279&user=%7B%22id%22%3A123456789%2C%22first_name%22%3A%22%D8%A8%DB%8C%D9%85%D8%A7%D8%B1%22%2C%22last_name%22%3A%22%D8%AA%D8%B3%D8%AA%DB%8C%22%2C%22username%22%3A%22tg_patient_test%22%2C%22language_code%22%3A%22fa%22%7D&hash=3baffd88a4ee51d1ddc7b084c2b9c5d35faba8883487ba5db56cf22b57963584

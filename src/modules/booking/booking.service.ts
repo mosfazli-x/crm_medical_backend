@@ -213,6 +213,7 @@ export class BookingService {
         startTime: dto.startTime,
         endTime: dto.endTime,
         visitTypeId: dto.visitTypeId ?? null,
+        patientId: dto.patientId ?? null,
         patientFirstName: dto.patientFirstName,
         patientLastName: dto.patientLastName,
         patientNationalId: dto.patientNationalId,
