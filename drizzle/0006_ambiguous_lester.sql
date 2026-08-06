@@ -1,0 +1,1 @@
+ALTER TABLE "patients" ADD COLUMN "birth_date_exact" boolean;

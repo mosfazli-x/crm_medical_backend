@@ -9,6 +9,7 @@ export const patients = pgTable('patients', {
     insuranceCode: varchar('insurance_code', { length: 50 }),
     insuranceType: varchar('insurance_type', { length: 50 }),
     birthDate: date('birth_date'),
+    birthDateExact: boolean('birth_date_exact'),
     phone: varchar('phone', { length: 20 }),
     address: text('address'),
     maritalStatus: varchar('marital_status', { length: 20 }),

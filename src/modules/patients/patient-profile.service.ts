@@ -43,6 +43,7 @@ export interface PatientProfile {
     ultrasound: any[]
     lab: any[]
     prescription: any[]
+    patientFiles: any[]
     other: any[]
   }
 }
@@ -159,7 +160,8 @@ export class PatientProfileService {
         ultrasound: attachmentsList.filter((f) => f.fileType === 'ultrasound').map(addDownloadUrl),
         lab: attachmentsList.filter((f) => f.fileType === 'lab').map(addDownloadUrl),
         prescription: attachmentsList.filter((f) => f.fileType === 'prescription').map(addDownloadUrl),
-        other: attachmentsList.filter((f) => !['ultrasound', 'lab', 'prescription'].includes(f.fileType)).map(addDownloadUrl),
+        patientFiles: attachmentsList.filter((f) => f.fileType === 'patient_files').map(addDownloadUrl),
+        other: attachmentsList.filter((f) => !['ultrasound', 'lab', 'prescription', 'patient_files'].includes(f.fileType)).map(addDownloadUrl),
       }
 
       return {
@@ -172,6 +174,7 @@ export class PatientProfileService {
           insuranceType: patient.insuranceType,
           insuranceInfo: getInsuranceInfo(patient.insuranceType),
           birthDate: patient.birthDate,
+          birthDateExact: patient.birthDateExact,
           phone: patient.phone,
           address: patient.address,
           maritalStatus: patient.maritalStatus,

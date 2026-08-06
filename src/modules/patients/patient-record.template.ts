@@ -26,6 +26,12 @@ function formatDate(dateStr: string | null | undefined): string {
   }
 }
 
+function formatBirthDate(dateStr: string | null | undefined, exact: boolean | null | undefined): string {
+  const base = formatDate(dateStr)
+  if (!dateStr || exact !== false) return base
+  return `${base} (تقریبی)`
+}
+
 function section(id: string, title: string, icon: string, content: string): string {
   return `
     <section class="section" id="${id}">
@@ -68,7 +74,7 @@ export function buildFullRecordHtml(profile: PatientProfile, generatedAt: string
     { label: 'نام و نام خانوادگی', value: `${b.firstName || ''} ${b.lastName || ''}` },
     { label: 'کد ملی', value: b.nationalId, ltr: true },
     { label: 'شماره تماس', value: b.phone, ltr: true },
-    { label: 'تاریخ تولد', value: formatDate(b.birthDate) },
+    { label: 'تاریخ تولد', value: formatBirthDate(b.birthDate, b.birthDateExact) },
     { label: 'وضعیت تأهل', value: b.maritalStatus || '—' },
     { label: 'آدرس', value: b.address },
   ])))
@@ -374,6 +380,7 @@ export function buildFullRecordHtml(profile: PatientProfile, generatedAt: string
     ...(att.ultrasound || []).map((a: any) => ({ ...a, group: 'سونوگرافی' })),
     ...(att.lab || []).map((a: any) => ({ ...a, group: 'آزمایشگاه' })),
     ...(att.prescription || []).map((a: any) => ({ ...a, group: 'نسخه' })),
+    ...(att.patientFiles || []).map((a: any) => ({ ...a, group: 'فایل‌های بیمار' })),
     ...(att.other || []).map((a: any) => ({ ...a, group: 'سایر' })),
   ]
   if (allAttachments.length) {
@@ -554,7 +561,7 @@ export function buildFullRecordHtml(profile: PatientProfile, generatedAt: string
     <div class="meta">
       <span>📋 کد ملی: ${escapeHtml(b.nationalId)}</span>
       ${b.phone ? `<span>📞 ${escapeHtml(b.phone)}</span>` : ''}
-      <span>🎂 ${formatDate(b.birthDate)}</span>
+      <span>🎂 ${formatBirthDate(b.birthDate, b.birthDateExact)}</span>
     </div>
   </div>
 

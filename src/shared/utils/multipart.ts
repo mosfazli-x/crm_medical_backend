@@ -1,7 +1,7 @@
 import { fileService, type FileMetadata } from '../services/file.service.js'
 
 export interface SavedFile {
-  type: 'ultrasound' | 'lab' | 'prescription'
+  type: 'ultrasound' | 'lab' | 'prescription' | 'patient_files'
   fieldname?: string
   originalName: string
   savedName: string
@@ -24,6 +24,7 @@ export const ATTACHMENT_TYPES = [
   'ultrasound',
   'lab',
   'prescription',
+  'patient_files',
   'hormone',
   'tumor_marker',
   'cytology',
