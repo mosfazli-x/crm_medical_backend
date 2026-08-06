@@ -1,7 +1,7 @@
 import type { DB } from '../../db/client'
-import { clinicTasks, users, staffProfiles } from '../../db/schema'
+import { clinicTasks, taskAssignees, users, staffProfiles } from '../../db/schema'
 import { alias } from 'drizzle-orm/pg-core'
-import { and, or, eq, ilike, asc, desc, gt, lt, notInArray, sql } from 'drizzle-orm'
+import { and, or, eq, ilike, asc, desc, gt, lt, notInArray, inArray, sql } from 'drizzle-orm'
 import { NotFoundError, ForbiddenError, ValidationError } from '../../shared/errors'
 import { getTodayJalali } from '../../shared/utils/date'
 import type {
@@ -13,23 +13,19 @@ import type {
 
 const ASSIGNABLE_ROLES = ['admin_doctor', 'doctor', 'lab', 'pharmacy', 'clinic_staff']
 
-const assigneeUser = alias(users, 'assignee_user')
 const creatorUser = alias(users, 'creator_user')
 
 const TASK_SELECT = {
   id: clinicTasks.id,
   title: clinicTasks.title,
   description: clinicTasks.description,
-  assigneeId: clinicTasks.assigneeId,
-  assigneeName: assigneeUser.fullName,
-  assigneePhone: assigneeUser.phone,
-  assigneeRole: assigneeUser.role,
-  assigneePosition: staffProfiles.position,
   createdById: clinicTasks.createdById,
   createdByName: creatorUser.fullName,
   status: clinicTasks.status,
   priority: clinicTasks.priority,
   dueDate: clinicTasks.dueDate,
+  estimatedMinutes: clinicTasks.estimatedMinutes,
+  spentMinutes: clinicTasks.spentMinutes,
   notes: clinicTasks.notes,
   completedAt: clinicTasks.completedAt,
   cancelledAt: clinicTasks.cancelledAt,
@@ -44,21 +40,40 @@ const ORDER_MAP: Record<string, ReturnType<typeof desc>[]> = {
   due_date_desc: [desc(clinicTasks.dueDate), desc(clinicTasks.createdAt)],
 }
 
+type TaskRow = typeof TASK_SELECT
+type AssigneeRow = {
+  taskId: string
+  id: string
+  fullName: string | null
+  phone: string
+  role: string
+  position: string | null
+  isActive: boolean | null
+}
+
 export class ScheduleService {
   constructor(private db: DB) {}
 
-  private async validateAssignee(assigneeId: string) {
-    const [assignee] = await this.db
+  private async validateAssignees(assigneeIds: string[]) {
+    if (!assigneeIds.length) {
+      throw new ValidationError('At least one assignee is required')
+    }
+    const unique = [...new Set(assigneeIds)]
+    const rows = await this.db
       .select({ id: users.id, role: users.role, patientId: users.patientId, status: users.status })
       .from(users)
-      .where(eq(users.id, assigneeId))
-      .limit(1)
+      .where(inArray(users.id, unique))
 
-    if (!assignee) throw new NotFoundError('Assignee user')
-    if (!ASSIGNABLE_ROLES.includes(assignee.role) || assignee.patientId) {
-      throw new ValidationError('Assignee must be a clinic member (patients cannot be assigned tasks)')
+    const found = new Set(rows.map((r) => r.id))
+    for (const id of unique) {
+      if (!found.has(id)) throw new NotFoundError('Assignee user')
     }
-    return assignee
+    for (const row of rows) {
+      if (!ASSIGNABLE_ROLES.includes(row.role) || row.patientId) {
+        throw new ValidationError('Assignee must be a clinic member (patients cannot be assigned tasks)')
+      }
+    }
+    return unique
   }
 
   private async getTaskRow(id: string) {
@@ -72,21 +87,61 @@ export class ScheduleService {
     return task
   }
 
+  private async buildAssignees(taskIds: string[]): Promise<Map<string, AssigneeRow[]>> {
+    if (!taskIds.length) return new Map()
+    const rows = await this.db
+      .select({
+        taskId: taskAssignees.taskId,
+        id: users.id,
+        fullName: users.fullName,
+        phone: users.phone,
+        role: users.role,
+        position: staffProfiles.position,
+        isActive: staffProfiles.isActive,
+      })
+      .from(taskAssignees)
+      .innerJoin(users, eq(taskAssignees.userId, users.id))
+      .leftJoin(staffProfiles, eq(taskAssignees.userId, staffProfiles.userId))
+      .where(inArray(taskAssignees.taskId, taskIds))
+      .orderBy(asc(users.fullName), asc(users.phone))
+
+    const map = new Map<string, AssigneeRow[]>()
+    for (const row of rows) {
+      const list = map.get(row.taskId) || []
+      list.push(row)
+      map.set(row.taskId, list)
+    }
+    return map
+  }
+
+  private async attachAssignees<T extends { id: string }>(rows: T[]): Promise<(T & { assignees: AssigneeRow[] })[]> {
+    const map = await this.buildAssignees(rows.map((r) => r.id))
+    return rows.map((row) => ({ ...row, assignees: map.get(row.id) || [] }))
+  }
+
   async create(dto: CreateTaskDto, createdById: string) {
-    await this.validateAssignee(dto.assigneeId)
+    const assigneeIds = await this.validateAssignees(dto.assignees)
 
     const [task] = await this.db
       .insert(clinicTasks)
       .values({
         title: dto.title,
         description: dto.description ?? null,
-        assigneeId: dto.assigneeId,
         createdById,
+        status: dto.status ?? 'pending',
         priority: dto.priority ?? 'medium',
         dueDate: dto.dueDate ?? null,
+        estimatedMinutes: dto.estimatedMinutes ?? null,
+        spentMinutes: dto.spentMinutes ?? 0,
         notes: dto.notes ?? null,
       })
       .returning({ id: clinicTasks.id })
+
+    if (assigneeIds.length) {
+      await this.db
+        .insert(taskAssignees)
+        .values(assigneeIds.map((userId) => ({ taskId: task.id, userId })))
+    }
 
     return this.findById(task.id)
   }
@@ -95,11 +150,14 @@ export class ScheduleService {
     const conditions: any[] = []
     const isAdmin = role === 'admin_doctor'
 
+    const assignedTo = (uid: string) =>
+      this.db.select({ taskId: taskAssignees.taskId }).from(taskAssignees).where(eq(taskAssignees.userId, uid))
+
     if (!isAdmin) {
-      conditions.push(eq(clinicTasks.assigneeId, userId))
+      conditions.push(inArray(clinicTasks.id, assignedTo(userId)))
     } else {
-      if (dto.assignedToMe === 'true') conditions.push(eq(clinicTasks.assigneeId, userId))
-      if (dto.assigneeId) conditions.push(eq(clinicTasks.assigneeId, dto.assigneeId))
+      if (dto.assignedToMe === 'true') conditions.push(inArray(clinicTasks.id, assignedTo(userId)))
+      if (dto.assigneeId) conditions.push(inArray(clinicTasks.id, assignedTo(dto.assigneeId)))
     }
 
     if (dto.status) conditions.push(eq(clinicTasks.status, dto.status))
@@ -129,9 +187,7 @@ export class ScheduleService {
       this.db
         .select(TASK_SELECT)
         .from(clinicTasks)
-        .leftJoin(assigneeUser, eq(clinicTasks.assigneeId, assigneeUser.id))
         .leftJoin(creatorUser, eq(clinicTasks.createdById, creatorUser.id))
-        .leftJoin(staffProfiles, eq(clinicTasks.assigneeId, staffProfiles.userId))
         .where(where)
         .orderBy(...ORDER_MAP[dto.sort])
         .limit(dto.limit)
@@ -142,33 +198,35 @@ export class ScheduleService {
         .where(where),
     ])
 
-    return { data: rows, total: countResult[0]?.count ?? 0 }
+    const withAssignees = await this.attachAssignees(rows)
+    return { data: withAssignees, total: countResult[0]?.count ?? 0 }
   }
 
   async findById(id: string) {
     const [task] = await this.db
       .select(TASK_SELECT)
       .from(clinicTasks)
-      .leftJoin(assigneeUser, eq(clinicTasks.assigneeId, assigneeUser.id))
       .leftJoin(creatorUser, eq(clinicTasks.createdById, creatorUser.id))
-      .leftJoin(staffProfiles, eq(clinicTasks.assigneeId, staffProfiles.userId))
       .where(eq(clinicTasks.id, id))
       .limit(1)
 
     if (!task) throw new NotFoundError('Task')
-    return task
+    const [withAssignees] = await this.attachAssignees([task])
+    return withAssignees
   }
 
   async update(id: string, dto: UpdateTaskDto) {
     await this.getTaskRow(id)
-    if (dto.assigneeId) await this.validateAssignee(dto.assigneeId)
+    let assigneeIds: string[] | undefined
+    if (dto.assignees) assigneeIds = await this.validateAssignees(dto.assignees)
 
     const updates: Record<string, unknown> = { updatedAt: new Date() }
     if (dto.title !== undefined) updates.title = dto.title
     if (dto.description !== undefined) updates.description = dto.description
-    if (dto.assigneeId !== undefined) updates.assigneeId = dto.assigneeId
     if (dto.priority !== undefined) updates.priority = dto.priority
     if (dto.dueDate !== undefined) updates.dueDate = dto.dueDate
+    if (dto.estimatedMinutes !== undefined) updates.estimatedMinutes = dto.estimatedMinutes
+    if (dto.spentMinutes !== undefined) updates.spentMinutes = dto.spentMinutes
     if (dto.notes !== undefined) updates.notes = dto.notes
 
     await this.db
@@ -176,14 +234,28 @@ export class ScheduleService {
       .set(updates)
       .where(eq(clinicTasks.id, id))
 
+    if (assigneeIds) {
+      await this.db.delete(taskAssignees).where(eq(taskAssignees.taskId, id))
+      await this.db
+        .insert(taskAssignees)
+        .values(assigneeIds.map((userId) => ({ taskId: id, userId })))
+    }
+
     return this.findById(id)
   }
 
   async changeStatus(id: string, userId: string, role: string, dto: StatusChangeDto) {
     const task = await this.getTaskRow(id)
 
-    if (role !== 'admin_doctor' && task.assigneeId !== userId) {
-      throw new ForbiddenError('Only the assignee or a manager can update this task')
+    if (role !== 'admin_doctor') {
+      const [assignment] = await this.db
+        .select({ taskId: taskAssignees.taskId })
+        .from(taskAssignees)
+        .where(and(eq(taskAssignees.taskId, id), eq(taskAssignees.userId, userId)))
+        .limit(1)
+      if (!assignment) {
+        throw new ForbiddenError('Only an assignee or a manager can update this task')
+      }
     }
 
     const updates: Record<string, unknown> = { status: dto.status, updatedAt: new Date() }

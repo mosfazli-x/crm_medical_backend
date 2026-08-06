@@ -40,7 +40,7 @@ export class ScheduleController {
 
     await this.log(request, 'create', 'task', data.id, {
       title: data.title,
-      assigneeId: data.assigneeId,
+      assignees: data.assignees?.map((a) => a.id),
       priority: data.priority,
       status: data.status,
     })

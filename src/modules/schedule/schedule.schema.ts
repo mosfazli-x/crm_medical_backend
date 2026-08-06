@@ -12,18 +12,23 @@ const jalaliDateField = z
 export const CreateTaskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(300),
   description: z.string().max(2000).optional().nullable(),
-  assigneeId: z.string().uuid('Invalid assignee'),
+  assignees: z.array(z.string().uuid('Invalid assignee')).min(1, 'At least one assignee is required'),
+  status: z.enum(TASK_STATUSES).default('pending'),
   priority: z.enum(TASK_PRIORITIES).default('medium'),
   dueDate: jalaliDateField,
+  estimatedMinutes: z.coerce.number().int().min(0).nullable().optional(),
+  spentMinutes: z.coerce.number().int().min(0).optional(),
   notes: z.string().max(2000).optional().nullable(),
 })
 
 export const UpdateTaskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(300).optional(),
   description: z.string().max(2000).nullable().optional(),
-  assigneeId: z.string().uuid('Invalid assignee').optional(),
+  assignees: z.array(z.string().uuid('Invalid assignee')).min(1, 'At least one assignee is required').optional(),
   priority: z.enum(TASK_PRIORITIES).optional(),
   dueDate: jalaliDateField,
+  estimatedMinutes: z.coerce.number().int().min(0).nullable().optional(),
+  spentMinutes: z.coerce.number().int().min(0).optional(),
   notes: z.string().max(2000).nullable().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'At least one field must be provided for update',

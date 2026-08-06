@@ -990,22 +990,31 @@ export const clinicTasks = pgTable('clinic_tasks', {
     id: uuid('id').primaryKey().defaultRandom(),
     title: varchar('title', { length: 300 }).notNull(),
     description: text('description'),
-    assigneeId: uuid('assignee_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     createdById: uuid('created_by_id').notNull().references(() => users.id),
     status: varchar('status', { length: 20 }).notNull().default('pending'),
     priority: varchar('priority', { length: 10 }).notNull().default('medium'),
     dueDate: varchar('due_date', { length: 10 }),
+    estimatedMinutes: integer('estimated_minutes'),
+    spentMinutes: integer('spent_minutes').default(0).notNull(),
     notes: text('notes'),
     completedAt: timestamp('completed_at'),
     cancelledAt: timestamp('cancelled_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
-    assigneeIdx: index('idx_clinic_tasks_assignee').on(table.assigneeId),
     statusIdx: index('idx_clinic_tasks_status').on(table.status),
     dueDateIdx: index('idx_clinic_tasks_due_date').on(table.dueDate),
     createdIdx: index('idx_clinic_tasks_created').on(table.createdAt),
-    assigneeStatusIdx: index('idx_clinic_tasks_assignee_status').on(table.assigneeId, table.status),
     chkStatus: check('chk_clinic_task_status', sql`${table.status} IN ('pending', 'in_progress', 'done', 'cancelled')`),
     chkPriority: check('chk_clinic_task_priority', sql`${table.priority} IN ('low', 'medium', 'high')`),
+}));
+
+export const taskAssignees = pgTable('task_assignees', {
+    taskId: uuid('task_id').notNull().references(() => clinicTasks.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    assignedAt: timestamp('assigned_at').defaultNow().notNull(),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.taskId, table.userId] }),
+    taskIdx: index('idx_task_assignees_task').on(table.taskId),
+    userIdx: index('idx_task_assignees_user').on(table.userId),
 }));
