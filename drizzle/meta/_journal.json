@@ -64,6 +64,13 @@
       "when": 1786033226437,
       "tag": "0008_overrated_dagger",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786212830484,
+      "tag": "0009_make_min_stock_level_integer",
+      "breakpoints": true
     }
   ]
 }

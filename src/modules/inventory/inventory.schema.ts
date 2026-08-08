@@ -13,7 +13,7 @@ export const ProductSchema = z.object({
   unit: z.string().optional().default('عدد'),
   purchase_price: z.number().min(0).optional().nullable(),
   selling_price: z.number().min(0).optional().nullable(),
-  min_stock_level: z.number().min(0).optional().nullable(),
+  min_stock_level: z.number().int().min(0).optional().nullable(),
   description: z.string().optional().nullable(),
 })
 

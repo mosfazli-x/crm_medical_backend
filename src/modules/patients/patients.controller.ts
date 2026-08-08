@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { PatientService } from './patients.service'
-import { CreatePatientSchema, UpdatePatientSchema, SendSmsSchema, SearchPatientsSchema, PatientSelfUpdateSchema } from './patients.schema'
+import { CreatePatientSchema, UpdatePatientSchema, SendSmsSchema, SearchPatientsSchema, PatientSelfUpdateSchema, ListPatientsQuerySchema } from './patients.schema'
 import { parseMultipart, saveBufferedFiles, cleanupFiles, ATTACHMENT_TYPES } from '../../shared/utils/multipart'
 import { fileService, auditService } from '../../shared/services'
 import { smsService, notificationService } from '../../shared/services'
@@ -80,9 +80,25 @@ export class PatientController {
     }
   }
 
-  async findAll(_request: FastifyRequest, reply: FastifyReply) {
-    const data = await this.patientService.findAll()
-    return reply.status(200).send({ success: true, data })
+  async findAll(request: FastifyRequest, reply: FastifyReply) {
+    const query = ListPatientsQuerySchema.parse(request.query)
+    const result = await this.patientService.list(query)
+
+    if (!query.page || !query.limit) {
+      return reply.status(200).send({ success: true, data: result.data })
+    }
+
+    return reply.status(200).send({
+      success: true,
+      data: result.data,
+      pagination: {
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        totalPages: result.totalPages,
+        hasMore: result.hasMore,
+      },
+    })
   }
 
   async search(request: FastifyRequest, reply: FastifyReply) {

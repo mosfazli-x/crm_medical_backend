@@ -10,13 +10,42 @@ import {
   attachments,
   vaccinations,
 } from '../../db/schema'
-import { eq, and, or, notInArray, desc, sql, ilike, inArray } from 'drizzle-orm'
+import { eq, and, or, notInArray, asc, desc, sql, ilike, inArray } from 'drizzle-orm'
 import { NotFoundError, ConflictError } from '../../shared/errors'
 import { getInsuranceInfo } from '../../shared/constants/insurance'
 import { fileService } from '../../shared/services'
-import type { CreatePatientDto, UpdatePatientDto, SearchPatientsDto } from './patients.schema'
+import type { CreatePatientDto, UpdatePatientDto, SearchPatientsDto, ListPatientsDto } from './patients.schema'
 import bcrypt from 'bcrypt'
 import { env } from '../../config/env.js'
+
+const PATIENT_LIST_SELECT = {
+  id: patients.id,
+  firstName: patients.firstName,
+  lastName: patients.lastName,
+  nationalId: patients.nationalId,
+  phone: patients.phone,
+  birthDate: patients.birthDate,
+  birthDateExact: patients.birthDateExact,
+  insuranceCode: patients.insuranceCode,
+  insuranceType: patients.insuranceType,
+  maritalStatus: patients.maritalStatus,
+  createdAt: patients.createdAt,
+}
+
+const PATIENT_ORDER_MAP: Record<string, ReturnType<typeof asc>[]> = {
+  created_at_desc: [desc(patients.createdAt)],
+  created_at_asc: [asc(patients.createdAt)],
+  full_name_asc: [asc(patients.firstName), asc(patients.lastName)],
+  full_name_desc: [desc(patients.firstName), desc(patients.lastName)],
+  national_id_asc: [asc(patients.nationalId)],
+  national_id_desc: [desc(patients.nationalId)],
+  phone_asc: [asc(patients.phone)],
+  phone_desc: [desc(patients.phone)],
+  birth_date_asc: [asc(patients.birthDate)],
+  birth_date_desc: [desc(patients.birthDate)],
+  marital_status_asc: [asc(patients.maritalStatus)],
+  marital_status_desc: [desc(patients.maritalStatus)],
+}
 
 export class PatientService {
   constructor(private db: DB) {}
@@ -149,24 +178,73 @@ export class PatientService {
     return newPatient
   }
 
-  async findAll() {
-    return this.db
-      .select({
-        id: patients.id,
-        firstName: patients.firstName,
-        lastName: patients.lastName,
-        nationalId: patients.nationalId,
-        phone: patients.phone,
-        birthDate: patients.birthDate,
-        birthDateExact: patients.birthDateExact,
-        insuranceCode: patients.insuranceCode,
-        insuranceType: patients.insuranceType,
-        maritalStatus: patients.maritalStatus,
-        createdAt: patients.createdAt,
-      })
-      .from(patients)
-      .where(eq(patients.isDeleted, false))
-      .orderBy(desc(patients.createdAt))
+  async list(dto: ListPatientsDto) {
+    const conditions: any[] = [eq(patients.isDeleted, false)]
+
+    const pattern = dto.q ? `%${dto.q}%` : null
+    if (pattern) {
+      conditions.push(
+        or(
+          ilike(patients.firstName, pattern),
+          ilike(patients.lastName, pattern),
+          ilike(patients.phone, pattern),
+          ilike(patients.nationalId, pattern),
+        )
+      )
+    }
+
+    if (dto.marital_status) {
+      conditions.push(eq(patients.maritalStatus, dto.marital_status))
+    }
+
+    const where = and(...conditions)
+    const orderBy = PATIENT_ORDER_MAP[dto.sort]
+
+    const paginated = Boolean(dto.page && dto.limit)
+
+    if (!paginated) {
+      const data = await this.db
+        .select(PATIENT_LIST_SELECT)
+        .from(patients)
+        .where(where)
+        .orderBy(...orderBy)
+
+      return {
+        data,
+        total: data.length,
+        page: 1,
+        limit: data.length,
+        totalPages: data.length === 0 ? 0 : 1,
+        hasMore: false,
+      }
+    }
+
+    const offset = (dto.page! - 1) * dto.limit!
+    const [rows, countResult] = await Promise.all([
+      this.db
+        .select(PATIENT_LIST_SELECT)
+        .from(patients)
+        .where(where)
+        .orderBy(...orderBy)
+        .limit(dto.limit!)
+        .offset(offset),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(patients)
+        .where(where),
+    ])
+
+    const total = countResult[0]?.count ?? 0
+    const totalPages = Math.ceil(total / dto.limit!)
+
+    return {
+      data: rows,
+      total,
+      page: dto.page!,
+      limit: dto.limit!,
+      totalPages,
+      hasMore: dto.page! < totalPages,
+    }
   }
 
   async search(dto: SearchPatientsDto) {

@@ -791,7 +791,7 @@ export const products = pgTable('products', {
     purchasePrice: decimal('purchase_price', { precision: 12, scale: 2 }),
     sellingPrice: decimal('selling_price', { precision: 12, scale: 2 }),
     currentStock: decimal('current_stock', { precision: 12, scale: 3 }).default('0'),
-    minStockLevel: decimal('min_stock_level', { precision: 12, scale: 3 }).default('0'),
+    minStockLevel: integer('min_stock_level').default(0),
     description: text('description'),
     isActive: boolean('is_active').default(true),
     createdAt: timestamp('created_at').defaultNow().notNull(),

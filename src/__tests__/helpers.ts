@@ -8,7 +8,7 @@ interface ApiResponse<T = any> {
   token?: string
   user?: any
   details?: any
-  pagination?: { page: number; limit: number; total: number; totalPages: number }
+  pagination?: { page: number; limit: number; total: number; totalPages: number; hasMore?: boolean }
 }
 
 async function request<T = any>(

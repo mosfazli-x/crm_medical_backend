@@ -1,0 +1,1 @@
+ALTER TABLE "products" ALTER COLUMN "min_stock_level" SET DATA TYPE integer;

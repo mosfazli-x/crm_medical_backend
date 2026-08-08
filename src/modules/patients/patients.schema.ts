@@ -164,6 +164,27 @@ export const SearchPatientsSchema = z.object({
   national_id: z.string().optional(),
 })
 
+export const ListPatientsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  q: z.string().max(100).optional(),
+  marital_status: z.string().max(50).optional(),
+  sort: z.enum([
+    'created_at_desc',
+    'created_at_asc',
+    'full_name_asc',
+    'full_name_desc',
+    'national_id_asc',
+    'national_id_desc',
+    'phone_asc',
+    'phone_desc',
+    'birth_date_asc',
+    'birth_date_desc',
+    'marital_status_asc',
+    'marital_status_desc',
+  ]).default('created_at_desc'),
+})
+
 export const PatientSelfUpdateSchema = z.object({
   first_name: z.string().min(2).optional(),
   last_name: z.string().min(2).optional(),
@@ -184,3 +205,4 @@ export type UpdatePatientDto = z.infer<typeof UpdatePatientSchema>
 export type PatientSelfUpdateDto = z.infer<typeof PatientSelfUpdateSchema>
 export type SendSmsDto = z.infer<typeof SendSmsSchema>
 export type SearchPatientsDto = z.infer<typeof SearchPatientsSchema>
+export type ListPatientsDto = z.infer<typeof ListPatientsQuerySchema>

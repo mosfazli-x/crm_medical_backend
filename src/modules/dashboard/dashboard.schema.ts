@@ -45,7 +45,7 @@ export const DashboardResponseSchema = z.object({
       name: z.string(),
       sku: z.string().nullable(),
       currentStock: z.string().nullable(),
-      minStockLevel: z.string().nullable(),
+      minStockLevel: z.number().nullable(),
       unit: z.string(),
     })),
   }).optional(),
