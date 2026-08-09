@@ -50,6 +50,7 @@ export class UserService {
     const [updatedUser] = await this.db
       .update(users)
       .set({
+        phoneConfirmed: true,
         status: 'approved',
         requiresPasswordChange: false,
         updatedAt: new Date(),

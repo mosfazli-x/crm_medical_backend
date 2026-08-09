@@ -6,7 +6,7 @@ import fastifyStatic from '@fastify/static'
 import path from 'node:path'
 import { sql } from 'drizzle-orm'
 import { env } from './config/env'
-import { errorHandler } from './shared/middleware'
+import { errorHandler, globalRateLimit } from './shared/middleware'
 import dbPlugin from './shared/plugins/db.plugin'
 import { INSURANCE_TYPE_VALUES } from './shared/constants/insurance'
 
@@ -21,6 +21,18 @@ export async function buildApp() {
   })
 
   app.setErrorHandler(errorHandler)
+
+  // Global request limiter: basic defense against request floods / DDoS
+  app.addHook('onRequest', globalRateLimit)
+
+  // Basic security response headers
+  app.addHook('onSend', (_request, reply, _payload, done) => {
+    reply.header('X-Content-Type-Options', 'nosniff')
+    reply.header('X-Frame-Options', 'SAMEORIGIN')
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin')
+    reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    done()
+  })
 
   const corsOrigins = env.NODE_ENV === 'production'
     ? [env.CORS_ORIGIN || 'https://yourdomain.com']

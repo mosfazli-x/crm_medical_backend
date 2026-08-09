@@ -86,6 +86,7 @@ export class AuthService {
           fullName: users.fullName,
           role: users.role,
           phone: users.phone,
+          status: users.status,
         })
 
 
@@ -115,7 +116,7 @@ export class AuthService {
             (error as { cause: Record<string, unknown> }).cause.code === '23505')
         )
       ) {
-        throw new ConflictError('Phone number already registered')
+        throw new ConflictError('این شماره تلفن قبلاً ثبت شده است')
       }
       throw error
     }

@@ -50,8 +50,41 @@ export function rateLimit(opts: {
 export const authRateLimit = rateLimit({
   max: 10,
   windowMs: 15 * 60 * 1000,
-  message: 'Too many authentication attempts. Please try again in 15 minutes.',
+  message: 'تعداد تلاش‌های ورود بیش از حد مجاز است. لطفاً ۱۵ دقیقه دیگر تلاش کنید.',
 })
+
+export const registerPhoneRateLimit = rateLimit({
+  max: 3,
+  windowMs: 60 * 60 * 1000,
+  keyGenerator: (request: FastifyRequest) => {
+    const body = request.body as { phone?: string } | undefined
+    const phone = typeof body?.phone === 'string' ? body.phone.trim() : ''
+    const ip = request.ip || request.socket.remoteAddress || 'unknown'
+    return `register:${ip}:${phone || 'unknown'}`
+  },
+  message: 'برای این شماره تلفن بیش از حد مجاز ثبت‌نام انجام شده است. لطفاً یک ساعت دیگر تلاش کنید.',
+})
+
+export const globalRateLimit = rateLimit({
+  max: 300,
+  windowMs: 60_000,
+  message: 'تعداد درخواست‌ها بیش از حد مجاز است. کمی بعد دوباره تلاش کنید.',
+})
+
+export function honeypotProtection(request: FastifyRequest, reply: FastifyReply, done: () => void) {
+  const body = request.body as Record<string, unknown> | undefined
+  const website = body && typeof body === 'object' ? body.website : undefined
+
+  if (typeof website === 'string' && website.trim().length > 0) {
+    reply.status(201).send({
+      success: true,
+      message: 'حساب شما با موفقیت ساخته شد',
+    })
+    return
+  }
+
+  done()
+}
 
 export const smsRateLimit = rateLimit({
   max: 5,
