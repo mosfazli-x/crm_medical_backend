@@ -71,6 +71,13 @@
       "when": 1786212830484,
       "tag": "0009_make_min_stock_level_integer",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786817422716,
+      "tag": "0010_funny_toad_men",
+      "breakpoints": true
     }
   ]
 }

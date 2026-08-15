@@ -103,6 +103,7 @@ export async function buildApp() {
   await app.register(doctorProfileRoutes, { prefix: '/api/doctor-profiles' })
   await app.register(accountingRoutes, { prefix: '/api/accounting' })
   await app.register(inventoryRoutes, { prefix: '/api/inventory' })
+  await app.register(consumablesRoutes, { prefix: '/api/consumables' })
   await app.register(patientUsageRoutes, { prefix: '/api/patient-usage' })
   await app.register(leadSourcesRoutes, { prefix: '/api/lead-sources' })
   await app.register(leadsRoutes, { prefix: '/api/leads' })
@@ -117,6 +118,10 @@ export async function buildApp() {
   // Seed default daily-report visit types
   const dailyReportsSvc = new DailyReportsService((app as any).db)
   await dailyReportsSvc.ensureDefaults()
+
+  // Seed default consumable items
+  const consumablesSvc = new ConsumablesService((app as any).db)
+  await consumablesSvc.ensureDefaults()
 
   app.get('/health', async (_, reply) => {
     try {
@@ -164,6 +169,7 @@ import { patientUsageRoutes } from './modules/patient-usage'
 import { leadSourcesRoutes, LeadSourcesService } from './modules/lead-sources'
 import { leadsRoutes } from './modules/leads'
 import { dailyReportsRoutes, DailyReportsService } from './modules/daily-reports'
+import { consumablesRoutes, ConsumablesService } from './modules/consumables'
 import { scheduleRoutes } from './modules/schedule'
 import { miniAppRoutes } from './modules/miniapp'
 import { SettingsService } from './modules/settings'

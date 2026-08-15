@@ -1018,3 +1018,30 @@ export const taskAssignees = pgTable('task_assignees', {
     taskIdx: index('idx_task_assignees_task').on(table.taskId),
     userIdx: index('idx_task_assignees_user').on(table.userId),
 }));
+
+// ─── Consumables (Clinic Consumables & Expenses) Module ───
+
+export const consumableItems = pgTable('consumable_items', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 150 }).notNull(),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    isActive: boolean('is_active').default(true).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    nameIdx: index('idx_consumable_items_name').on(table.name),
+}));
+
+export const consumableExpenses = pgTable('consumable_expenses', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    itemId: uuid('item_id').notNull().references(() => consumableItems.id, { onDelete: 'cascade' }),
+    month: varchar('month', { length: 7 }).notNull(),
+    amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    itemMonthIdx: index('idx_consumable_expenses_item_month').on(table.itemId, table.month),
+    monthIdx: index('idx_consumable_expenses_month').on(table.month),
+    uniq: uniqueIndex('uq_consumable_expenses_item_month').on(table.itemId, table.month),
+}));
