@@ -18,6 +18,7 @@ export interface BufferedFile {
   fieldname: string
   originalName: string
   buffer: Buffer
+  mimeType?: string
 }
 
 export const ATTACHMENT_TYPES = [
@@ -52,6 +53,7 @@ export async function parseMultipart(
       type: string
       fieldname: string
       filename?: string
+      mimetype?: string
       toBuffer?: () => Promise<Buffer>
       value?: string
     }
@@ -65,6 +67,7 @@ export async function parseMultipart(
           fieldname: typedPart.fieldname,
           originalName: typedPart.filename || 'unknown',
           buffer,
+          mimeType: typedPart.mimetype,
         })
       }
     } else if (typedPart.value !== undefined) {

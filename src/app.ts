@@ -110,6 +110,7 @@ export async function buildApp() {
   await app.register(dailyReportsRoutes, { prefix: '/api/daily-reports' })
   await app.register(scheduleRoutes, { prefix: '/api/schedule' })
   await app.register(miniAppRoutes, { prefix: '/api/miniapp' })
+  await app.register(ocrRoutes, { prefix: '/api/ocr' })
 
   // Seed default lead sources
   const leadSourcesSvc = new LeadSourcesService((app as any).db)
@@ -172,4 +173,5 @@ import { dailyReportsRoutes, DailyReportsService } from './modules/daily-reports
 import { consumablesRoutes, ConsumablesService } from './modules/consumables'
 import { scheduleRoutes } from './modules/schedule'
 import { miniAppRoutes } from './modules/miniapp'
+import { ocrRoutes } from './modules/ocr'
 import { SettingsService } from './modules/settings'

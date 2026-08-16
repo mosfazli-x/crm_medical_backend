@@ -45,6 +45,9 @@ const envSchema = z.object({
   PRESIGNED_URL_EXPIRY: z.coerce.number().int().positive().default(3600),
 
   CORS_ORIGIN: z.string().optional(),
+
+  OCR_SPACE_API_KEY: z.string().optional(),
+  OCR_SPACE_PROXY: z.string().url().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)
