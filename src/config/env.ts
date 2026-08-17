@@ -48,6 +48,15 @@ const envSchema = z.object({
 
   OCR_SPACE_API_KEY: z.string().optional(),
   OCR_SPACE_PROXY: z.string().url().optional(),
+
+  // AI Support
+  GEMINI_API_KEY: z.string().optional(),
+  GROQ_API_KEY: z.string().optional(),
+  TELEGRAM_SUPPORT_CHAT_ID: z.string().optional(),
+  SUPPORT_AI_ENABLED: z.preprocess(
+    (val) => val === 'true' || val === '1' || val === true || val === 1,
+    z.boolean()
+  ).default(false),
 })
 
 const parsed = envSchema.safeParse(process.env)

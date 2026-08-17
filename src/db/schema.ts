@@ -1,4 +1,4 @@
-import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, integer, jsonb, decimal, primaryKey, check, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, integer, jsonb, decimal, real, primaryKey, check, index, uniqueIndex, pgExtension } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm'
 
 export const patients = pgTable('patients', {
@@ -1044,4 +1044,65 @@ export const consumableExpenses = pgTable('consumable_expenses', {
     itemMonthIdx: index('idx_consumable_expenses_item_month').on(table.itemId, table.month),
     monthIdx: index('idx_consumable_expenses_month').on(table.month),
     uniq: uniqueIndex('uq_consumable_expenses_item_month').on(table.itemId, table.month),
+}));
+
+// ─── FAQ & Support Module ───
+
+export const faqEntries = pgTable('faq_entries', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    questionFa: text('question_fa').notNull(),
+    answerFa: text('answer_fa').notNull(),
+    questionEn: text('question_en'),
+    answerEn: text('answer_en'),
+    category: varchar('category', { length: 50 }).notNull().default('general'),
+    tags: text('tags').array().default(sql`'{}'::text[]`),
+    source: varchar('source', { length: 30 }).notNull().default('manual'),
+    sourceAiModel: varchar('source_ai_model', { length: 100 }),
+    confidence: real('confidence').default(1.0),
+    usageCount: integer('usage_count').default(0),
+    isPublished: boolean('is_published').default(true),
+    createdBy: uuid('created_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    categoryIdx: index('idx_faq_category').on(table.category),
+    publishedIdx: index('idx_faq_published').on(table.isPublished),
+    usageIdx: index('idx_faq_usage').on(table.usageCount),
+    tagsIdx: index('idx_faq_tags').using('gin', table.tags),
+    chkSource: check('chk_faq_source', sql`${table.source} IN ('manual', 'gemini', 'groq', 'user_confirmed', 'approved')`),
+    chkCategory: check('chk_faq_category', sql`${table.category} IN ('general', 'billing', 'scheduling', 'clinical', 'patients', 'prescriptions', 'lab_results', 'inventory', 'accounting', 'staff', 'settings', 'other')`),
+}));
+
+export const supportTickets = pgTable('support_tickets', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id),
+    question: text('question').notNull(),
+    questionLanguage: varchar('question_language', { length: 5 }).notNull().default('fa'),
+    aiProvider: varchar('ai_provider', { length: 20 }),
+    aiModel: varchar('ai_model', { length: 100 }),
+    aiResponse: text('ai_response'),
+    aiConfidence: real('ai_confidence'),
+    aiResponseFa: text('ai_response_fa'),
+    aiResponseEn: text('ai_response_en'),
+    aiAttempts: integer('ai_attempts').default(0),
+    escalated: boolean('escalated').default(false),
+    escalatedToTelegram: boolean('escalated_to_telegram').default(false),
+    escalatedToCrm: boolean('escalated_to_crm').default(false),
+    telegramMessageId: integer('telegram_message_id'),
+    resolved: boolean('resolved').default(false),
+    resolvedAnswer: text('resolved_answer'),
+    resolvedBy: varchar('resolved_by', { length: 30 }),
+    resolvedAt: timestamp('resolved_at'),
+    needsApproval: boolean('needs_approval').default(false),
+    publishedFaqId: uuid('published_faq_id').references(() => faqEntries.id),
+    responseTimeMs: integer('response_time_ms'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    userIdx: index('idx_support_tickets_user').on(table.userId),
+    resolvedIdx: index('idx_support_tickets_resolved').on(table.resolved),
+    approvalIdx: index('idx_support_tickets_approval').on(table.needsApproval),
+    createdIdx: index('idx_support_tickets_created').on(table.createdAt),
+    chkAiProvider: check('chk_support_tickets_ai_provider', sql`${table.aiProvider} IS NULL OR ${table.aiProvider} IN ('gemini', 'groq')`),
+    chkResolvedBy: check('chk_support_tickets_resolved_by', sql`${table.resolvedBy} IS NULL OR ${table.resolvedBy} IN ('user_confirmed', 'admin', 'ai')`),
 }));

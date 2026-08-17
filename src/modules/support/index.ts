@@ -1,0 +1,7 @@
+export { faqRoutes } from './faq.routes'
+export { aiSupportRoutes } from './ai-support.routes'
+export { FaqService } from './faq.service'
+export { TicketService } from './ticket.service'
+export { AiSupportService, aiSupportService } from './ai-support.service'
+export { FaqController } from './faq.controller'
+export { AiSupportController } from './ai-support.controller'
