@@ -60,7 +60,7 @@ export class AiSupportService {
 - If unsure, say you'll escalate to human support`
 
       const response = await axios.post<GeminiResponse>(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${this.geminiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${this.geminiKey}`,
         {
           contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nQuestion: ${question}` }] }],
           generationConfig: {

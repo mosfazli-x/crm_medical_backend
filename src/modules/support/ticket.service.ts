@@ -112,7 +112,7 @@ export class TicketService {
           question,
           questionLanguage: language,
           aiProvider,
-          aiModel: aiProvider === 'gemini' ? 'gemini-2.5-flash-lite' : 'llama-3.3-70b-versatile',
+          aiModel: aiProvider === 'gemini' ? 'gemini-3.5-flash-lite' : 'llama-3.3-70b-versatile',
           aiResponse,
           aiConfidence,
           aiResponseFa: language === 'fa' ? aiResponse : null,
