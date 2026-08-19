@@ -3,7 +3,7 @@ import { supportTickets, users, faqEntries } from '../../db/schema'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { NotFoundError } from '../../shared/errors'
 import { FaqService } from './faq.service'
-import { aiSupportService } from './ai-support.service'
+import { aiSupportService, type FaqContextEntry } from './ai-support.service'
 import { telegramEscalationService } from './telegram-escalation.service'
 import type { AskQuestionDto } from './ai-support.schema'
 
@@ -12,6 +12,27 @@ export class TicketService {
 
   constructor(private db: DB) {
     this.faqService = new FaqService(db)
+  }
+
+  private async getFaqContext(question: string, language: 'fa' | 'en', category?: string): Promise<FaqContextEntry[]> {
+    try {
+      const results = await this.faqService.search({
+        q: question,
+        language,
+        category: category || undefined,
+        limit: 5,
+      })
+
+      return results
+        .filter(r => r.score >= 0.3)
+        .map(r => ({
+          question: language === 'fa' ? (r.questionFa || r.questionEn || '') : (r.questionEn || r.questionFa || ''),
+          answer: language === 'fa' ? (r.answerFa || r.answerEn || '') : (r.answerEn || r.answerFa || ''),
+          score: r.score,
+        }))
+    } catch {
+      return []
+    }
   }
 
   async askQuestion(userId: string, userName: string | undefined, dto: AskQuestionDto) {
@@ -26,7 +47,7 @@ export class TicketService {
       limit: 1,
     })
 
-    if (faqResults.length > 0 && faqResults[0].score >= 0.4) {
+    if (faqResults.length > 0 && faqResults[0].score >= 0.75) {
       const faq = faqResults[0]
       const elapsed = Date.now() - startTime
 
@@ -60,6 +81,9 @@ export class TicketService {
       }
     }
 
+    // Step 1.5: Gather FAQ context for LLM (lower threshold = 0.15 for context)
+    const faqContext = await this.getFaqContext(question, language, category || undefined)
+
     // Step 2: Try Gemini
     let aiResponse: string | undefined
     let aiProvider: string | undefined
@@ -69,7 +93,7 @@ export class TicketService {
 
     if (aiSupportService.isGeminiAvailable()) {
       aiAttempts++
-      const geminiResult = await aiSupportService.askGemini(question, language)
+      const geminiResult = await aiSupportService.askGemini(question, language, faqContext.length > 0 ? faqContext : undefined)
       aiAttemptLog.push({ provider: 'gemini', response: geminiResult.response, error: geminiResult.error })
 
       if (geminiResult.success && geminiResult.response) {
@@ -79,7 +103,7 @@ export class TicketService {
       } else if (aiSupportService.isGroqAvailable()) {
         // Step 3: Gemini failed (rate limited, 404, key invalid, etc.) — try Groq
         aiAttempts++
-        const groqResult = await aiSupportService.askGroq(question, language)
+        const groqResult = await aiSupportService.askGroq(question, language, faqContext.length > 0 ? faqContext : undefined)
         aiAttemptLog.push({ provider: 'groq', response: groqResult.response, error: groqResult.error })
 
         if (groqResult.success && groqResult.response) {
@@ -91,7 +115,7 @@ export class TicketService {
     } else if (aiSupportService.isGroqAvailable()) {
       // Gemini not available, try Groq directly
       aiAttempts++
-      const groqResult = await aiSupportService.askGroq(question, language)
+      const groqResult = await aiSupportService.askGroq(question, language, faqContext.length > 0 ? faqContext : undefined)
       aiAttemptLog.push({ provider: 'groq', response: groqResult.response, error: groqResult.error })
 
       if (groqResult.success && groqResult.response) {

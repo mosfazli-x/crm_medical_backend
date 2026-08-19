@@ -3,6 +3,7 @@ import { PatientController } from './patients.controller'
 import { PatientService } from './patients.service'
 import { PatientProfileController } from './patient-profile.controller'
 import { PatientProfileService } from './patient-profile.service'
+import { PatientTimelineService } from './patient-timeline.service'
 import { buildFullRecordHtml } from './patient-record.template'
 import { authenticate, requireRole } from '../../shared/middleware'
 
@@ -11,6 +12,7 @@ export async function patientRoutes(fastify: FastifyInstance) {
   const controller = new PatientController(service)
   const profileService = new PatientProfileService(fastify.db)
   const profileController = new PatientProfileController(profileService)
+  const timelineService = new PatientTimelineService(fastify.db)
 
   fastify.post('/register', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.create(req, rep))
 
@@ -66,6 +68,21 @@ export async function patientRoutes(fastify: FastifyInstance) {
     '/:id/profile',
     { preHandler: requireRole('admin_doctor', 'doctor') },
     (req, rep) => profileController.getProfile(req, rep)
+  )
+
+  fastify.get<{ Params: { id: string }; Querystring: { from?: string; to?: string; types?: string } }>(
+    '/:id/timeline',
+    { preHandler: requireRole('admin_doctor', 'doctor') },
+    async (req, rep) => {
+      const { id } = req.params
+      const types = req.query.types ? req.query.types.split(',') : undefined
+      const data = await timelineService.getTimeline(id, {
+        from: req.query.from,
+        to: req.query.to,
+        types,
+      })
+      return rep.status(200).send({ success: true, data })
+    }
   )
 
   fastify.get<{ Params: { id: string } }>(

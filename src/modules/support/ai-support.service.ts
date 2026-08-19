@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { env } from '../../config/env'
+import { getSystemKnowledgeDoc } from './system-knowledge'
 
 interface GeminiResponse {
   candidates: Array<{
@@ -16,6 +17,12 @@ interface GroqResponse {
     message: { content: string }
     finish_reason: string
   }>
+}
+
+export interface FaqContextEntry {
+  question: string
+  answer: string
+  score?: number
 }
 
 export class AiSupportService {
@@ -35,7 +42,43 @@ export class AiSupportService {
     return !!this.groqKey
   }
 
-  async askGemini(question: string, language: string): Promise<{
+  private buildSystemPrompt(language: string, faqContext?: FaqContextEntry[]): string {
+    const systemKnowledge = getSystemKnowledgeDoc()
+
+    const basePrompt = language === 'fa'
+      ? `تو یک دستیار پشتیبانی سیستم CRM کلینیک پزشکی هستی. به سوالات کاربران در مورد استفاده از سیستم پاسخ بده.
+- فقط به سوالات مربوط به استفاده از سیستم CRM پاسخ بده
+- اگر سوال پزشکی بالینی است یا ربطی به سیستم ندارد، بگو که این سوال خارج از حوزه پشتیبانی سیستم است
+- پاسخ‌ها را به زبان فارسی و مختصر و مفید بده
+- اگر مطمئن نیستی، بگو که سوال را به پشتیبانی انسانی ارجاع می‌دهی
+
+### اطلاعات کامل سیستم:
+${systemKnowledge}`
+      : `You are a support assistant for a medical clinic CRM system. Answer user questions about using the system.
+- Only answer questions about using the CRM system
+- If it's a clinical medical question or unrelated to the system, say it's outside system support scope
+- Keep answers concise and helpful
+- If unsure, say you'll escalate to human support
+
+### Complete System Knowledge:
+${systemKnowledge}`
+
+    if (!faqContext || faqContext.length === 0) {
+      return basePrompt
+    }
+
+    const faqBlock = faqContext
+      .map((entry, i) => `${i + 1}. Q: ${entry.question}\n   A: ${entry.answer}`)
+      .join('\n')
+
+    const contextIntro = language === 'fa'
+      ? '\n\n以下是从知识库中找到的与用户问题相关的参考条目。请优先参考这些条目来回答用户的问题。如果参考条目中有完全匹配的答案，请直接使用。如果只是部分相关，请结合参考条目和你的知识来回答：'
+      : '\n\nBelow are relevant FAQ entries from the knowledge base that may help answer the user\'s question. Prioritize these entries when formulating your answer. If a reference entry directly answers the question, use it. If partially relevant, combine it with your general knowledge:'
+
+    return `${basePrompt}${contextIntro}\n\n${faqBlock}`
+  }
+
+  async askGemini(question: string, language: string, faqContext?: FaqContextEntry[]): Promise<{
     success: boolean
     response?: string
     confidence?: number
@@ -47,17 +90,7 @@ export class AiSupportService {
     }
 
     try {
-      const systemPrompt = language === 'fa'
-        ? `تو یک دستیار پشتیبانی سیستم CRM کلینیک پزشکی هستی. به سوالات کاربران در مورد استفاده از سیستم پاسخ بده.
-- فقط به سوالات مربوط به استفاده از سیستم CRM پاسخ بده
-- اگر سوال پزشکی بالینی است یا ربطی به سیستم ندارد، بگو که این سوال خارج از حوزه پشتیبانی سیستم است
-- پاسخ‌ها را به زبان فارسی و مختصر و مفید بده
-- اگر مطمئن نیستی، بگو که سوال را به پشتیبانی انسانی ارجاع می‌دهی`
-        : `You are a support assistant for a medical clinic CRM system. Answer user questions about using the system.
-- Only answer questions about using the CRM system
-- If it's a clinical medical question or unrelated to the system, say it's outside system support scope
-- Keep answers concise and helpful
-- If unsure, say you'll escalate to human support`
+      const systemPrompt = this.buildSystemPrompt(language, faqContext)
 
       const response = await axios.post<GeminiResponse>(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${this.geminiKey}`,
@@ -93,7 +126,7 @@ export class AiSupportService {
     }
   }
 
-  async askGroq(question: string, language: string): Promise<{
+  async askGroq(question: string, language: string, faqContext?: FaqContextEntry[]): Promise<{
     success: boolean
     response?: string
     confidence?: number
@@ -105,17 +138,7 @@ export class AiSupportService {
     }
 
     try {
-      const systemPrompt = language === 'fa'
-        ? `تو یک دستیار پشتیبانی سیستم CRM کلینیک پزشکی هستی. به سوالات کاربران در مورد استفاده از سیستم پاسخ بده.
-- فقط به سوالات مربوط به استفاده از سیستم CRM پاسخ بده
-- اگر سوال پزشکی بالینی است یا ربطی به سیستم ندارد، بگو که این سوال خارج از حوزه پشتیبانی سیستم است
-- پاسخ‌ها را به زبان فارسی و مختصر و مفید بده
-- اگر مطمئن نیستی، بگو که سوال را به پشتیبانی انسانی ارجاع می‌دهی`
-        : `You are a support assistant for a medical clinic CRM system. Answer user questions about using the system.
-- Only answer questions about using the CRM system
-- If it's a clinical medical question or unrelated to the system, say it's outside system support scope
-- Keep answers concise and helpful
-- If unsure, say you'll escalate to human support`
+      const systemPrompt = this.buildSystemPrompt(language, faqContext)
 
       const response = await axios.post<GroqResponse>(
         'https://api.groq.com/openai/v1/chat/completions',

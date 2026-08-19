@@ -55,16 +55,28 @@ export class FaqService {
       .orderBy(desc(faqEntries.usageCount))
       .limit(limit)
 
-    // Score results by how many words matched
+    // Score results by match quality
     const scored = results.map(r => {
-      const text = `${r.questionFa || ''} ${r.questionEn || ''} ${r.answerFa || ''} ${r.answerEn || ''}`.toLowerCase()
-      const matchCount = words.filter(w => text.includes(w.toLowerCase())).length
-      const score = matchCount / words.length
+      const questionText = `${r.questionFa || ''} ${r.questionEn || ''}`.toLowerCase()
+      const answerText = `${r.answerFa || ''} ${r.answerEn || ''}`.toLowerCase()
+      const fullText = `${questionText} ${answerText}`
+
+      // Count word matches in question (higher weight) vs answer
+      const questionMatches = words.filter(w => questionText.includes(w.toLowerCase())).length
+      const answerMatches = words.filter(w => answerText.includes(w.toLowerCase()) && !questionText.includes(w.toLowerCase())).length
+
+      // Score: question matches weighted 2x, answer matches weighted 1x
+      const weightedScore = (questionMatches * 2 + answerMatches) / (words.length * 2)
+
+      // Bonus: if all words appear consecutively in question (exact phrase match)
+      const phraseBonus = questionText.includes(words.join(' ').toLowerCase()) ? 0.2 : 0
+
+      const score = Math.min(1, weightedScore + phraseBonus)
       return { ...r, score }
     })
 
     // Filter results with minimum match threshold
-    const filtered = scored.filter(r => r.score >= 0.3)
+    const filtered = scored.filter(r => r.score >= 0.4)
 
     // Sort by score then usage count
     filtered.sort((a, b) => (b.score - a.score) || (b.usageCount || 0) - (a.usageCount || 0))

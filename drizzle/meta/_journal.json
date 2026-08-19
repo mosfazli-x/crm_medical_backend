@@ -85,6 +85,13 @@
       "when": 1786992244661,
       "tag": "0011_steady_the_hood",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787088865265,
+      "tag": "0012_minor_thunderbird",
+      "breakpoints": true
     }
   ]
 }

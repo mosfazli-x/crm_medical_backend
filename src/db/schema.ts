@@ -984,6 +984,23 @@ export const dailyReportVisitTypes = pgTable('daily_report_visit_types', {
     nameIdx: sql`CREATE INDEX IF NOT EXISTS idx_daily_report_visit_types_name ON daily_report_visit_types(name)`,
 }));
 
+// ─── Patient Notes (Timeline Notes) ───
+export const patientNotes = pgTable('patient_notes', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+    doctorId: uuid('doctor_id').notNull().references(() => users.id),
+    content: text('content').notNull(),
+    eventType: varchar('event_type', { length: 50 }),
+    eventDate: timestamp('event_date'),
+    isDeleted: boolean('is_deleted').default(false),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_patient_notes_patient ON patient_notes(patient_id)`,
+    doctorIdx: sql`CREATE INDEX IF NOT EXISTS idx_patient_notes_doctor ON patient_notes(doctor_id)`,
+    eventDateIdx: sql`CREATE INDEX IF NOT EXISTS idx_patient_notes_event_date ON patient_notes(event_date)`,
+}));
+
 // ─── Schedule (Task Management) Module ───
 
 export const clinicTasks = pgTable('clinic_tasks', {

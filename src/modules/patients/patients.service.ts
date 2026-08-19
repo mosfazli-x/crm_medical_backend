@@ -51,7 +51,8 @@ export class PatientService {
   constructor(private db: DB) {}
 
   async create(dto: CreatePatientDto, uploadedFiles: Array<{ type: string; fieldname?: string; originalName: string; filePath: string; fileHash?: string; fileSize?: number; mimeType?: string; relativePath?: string }>) {
-    const newPatient = await this.db.transaction(async (tx) => {
+    try {
+      const newPatient = await this.db.transaction(async (tx) => {
       const [insertedPatient] = await tx
         .insert(patients)
         .values({
@@ -176,6 +177,20 @@ export class PatientService {
     })
 
     return newPatient
+    } catch (error: any) {
+      const pgCode = error?.code || error?.cause?.code
+      const pgConstraint = error?.constraint || error?.cause?.constraint || ''
+      if (pgCode === '23505') {
+        if (pgConstraint.includes('national_id') || String(error?.message || '').includes('national_id')) {
+          throw new ConflictError('این کد ملی قبلاً ثبت شده است')
+        }
+        if (pgConstraint.includes('phone') || String(error?.message || '').includes('users_phone_key')) {
+          throw new ConflictError('این شماره تلفن قبلاً ثبت شده است')
+        }
+        throw new ConflictError('اطلاعات تکراری است')
+      }
+      throw error
+    }
   }
 
   async list(dto: ListPatientsDto) {
@@ -393,7 +408,8 @@ export class PatientService {
     dto: UpdatePatientDto,
     uploadedFiles: Array<{ type: string; fieldname?: string; originalName: string; filePath: string; fileHash?: string; fileSize?: number; mimeType?: string; relativePath?: string }>
   ) {
-    const result = await this.db.transaction(async (tx) => {
+    try {
+      const result = await this.db.transaction(async (tx) => {
       const p = dto.patient
       const updatedPatientList = await tx
         .update(patients)
@@ -531,6 +547,20 @@ export class PatientService {
     })
 
     return result
+    } catch (error: any) {
+      const pgCode = error?.code || error?.cause?.code
+      const pgConstraint = error?.constraint || error?.cause?.constraint || ''
+      if (pgCode === '23505') {
+        if (pgConstraint.includes('national_id') || String(error?.message || '').includes('national_id')) {
+          throw new ConflictError('این کد ملی قبلاً ثبت شده است')
+        }
+        if (pgConstraint.includes('phone') || String(error?.message || '').includes('users_phone_key')) {
+          throw new ConflictError('این شماره تلفن قبلاً ثبت شده است')
+        }
+        throw new ConflictError('اطلاعات تکراری است')
+      }
+      throw error
+    }
   }
 
   async deleteAttachment(patientId: string, attachmentId: string) {
@@ -619,7 +649,8 @@ export class PatientService {
   }
 
   async updateMyProfile(patientId: string, data: Record<string, any>) {
-    const result = await this.db.transaction(async (tx) => {
+    try {
+      const result = await this.db.transaction(async (tx) => {
       const [updated] = await tx
         .update(patients)
         .set({
@@ -654,6 +685,20 @@ export class PatientService {
     })
 
     return result
+    } catch (error: any) {
+      const pgCode = error?.code || error?.cause?.code
+      const pgConstraint = error?.constraint || error?.cause?.constraint || ''
+      if (pgCode === '23505') {
+        if (pgConstraint.includes('national_id') || String(error?.message || '').includes('national_id')) {
+          throw new ConflictError('این کد ملی قبلاً ثبت شده است')
+        }
+        if (pgConstraint.includes('phone') || String(error?.message || '').includes('users_phone_key')) {
+          throw new ConflictError('این شماره تلفن قبلاً ثبت شده است')
+        }
+        throw new ConflictError('اطلاعات تکراری است')
+      }
+      throw error
+    }
   }
 
   async softDelete(id: string) {
