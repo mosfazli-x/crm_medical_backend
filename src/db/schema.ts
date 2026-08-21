@@ -1,4 +1,4 @@
-import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, integer, jsonb, decimal, real, primaryKey, check, index, uniqueIndex, pgExtension } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, integer, jsonb, decimal, real, primaryKey, check, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm'
 
 export const patients = pgTable('patients', {
