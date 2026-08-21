@@ -1123,3 +1123,79 @@ export const supportTickets = pgTable('support_tickets', {
     chkAiProvider: check('chk_support_tickets_ai_provider', sql`${table.aiProvider} IS NULL OR ${table.aiProvider} IN ('gemini', 'groq')`),
     chkResolvedBy: check('chk_support_tickets_resolved_by', sql`${table.resolvedBy} IS NULL OR ${table.resolvedBy} IN ('user_confirmed', 'admin', 'ai')`),
 }));
+
+export const loginSessions = pgTable('login_sessions', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    event: varchar('event', { length: 20 }).notNull(),
+    browser: varchar('browser', { length: 100 }),
+    browserVersion: varchar('browser_version', { length: 50 }),
+    os: varchar('os', { length: 100 }),
+    osVersion: varchar('os_version', { length: 50 }),
+    device: varchar('device', { length: 100 }),
+    deviceType: varchar('device_type', { length: 20 }),
+    ipAddress: varchar('ip_address', { length: 45 }),
+    userAgent: text('user_agent'),
+    revoked: boolean('revoked').default(false),
+    revokedAt: timestamp('revoked_at'),
+    endedAt: timestamp('ended_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    userIdx: index('idx_login_sessions_user').on(table.userId),
+    eventIdx: index('idx_login_sessions_event').on(table.event),
+    createdIdx: index('idx_login_sessions_created').on(table.createdAt),
+    revokedIdx: index('idx_login_sessions_revoked').on(table.revoked),
+    userEventIdx: index('idx_login_sessions_user_event').on(table.userId, table.event),
+    chkEvent: check('chk_login_sessions_event', sql`${table.event} IN ('login', 'logout')`),
+    chkDeviceType: check('chk_login_sessions_device_type', sql`${table.deviceType} IS NULL OR ${table.deviceType} IN ('desktop', 'mobile', 'tablet', 'unknown')`),
+}));
+
+export const blogCategories = pgTable('blog_categories', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    nameFa: varchar('name_fa', { length: 200 }).notNull(),
+    nameEn: varchar('name_en', { length: 200 }),
+    slug: varchar('slug', { length: 200 }).notNull().unique(),
+    sortOrder: integer('sort_order').default(0),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    slugIdx: index('idx_blog_categories_slug').on(table.slug),
+}));
+
+export const blogPosts = pgTable('blog_posts', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    titleFa: varchar('title_fa', { length: 500 }).notNull(),
+    titleEn: varchar('title_en', { length: 500 }),
+    slug: varchar('slug', { length: 500 }).notNull().unique(),
+    excerptFa: text('excerpt_fa').notNull(),
+    excerptEn: text('excerpt_en'),
+    contentFa: text('content_fa').notNull(),
+    contentEn: text('content_en'),
+    coverImage: varchar('cover_image', { length: 1000 }),
+    categoryId: uuid('category_id').references(() => blogCategories.id, { onDelete: 'set null' }),
+    authorId: uuid('author_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    isPublished: boolean('is_published').default(false),
+    publishedAt: timestamp('published_at'),
+    viewCount: integer('view_count').default(0),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    slugIdx: index('idx_blog_posts_slug').on(table.slug),
+    categoryIdx: index('idx_blog_posts_category').on(table.categoryId),
+    authorIdx: index('idx_blog_posts_author').on(table.authorId),
+    publishedIdx: index('idx_blog_posts_published').on(table.isPublished),
+    createdIdx: index('idx_blog_posts_created').on(table.createdAt),
+}));
+
+export const blogComments = pgTable('blog_comments', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    postId: uuid('post_id').notNull().references(() => blogPosts.id, { onDelete: 'cascade' }),
+    authorName: varchar('author_name', { length: 200 }).notNull(),
+    authorEmail: varchar('author_email', { length: 300 }).notNull(),
+    content: text('content').notNull(),
+    status: varchar('status', { length: 20 }).default('pending').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    postIdx: index('idx_blog_comments_post').on(table.postId),
+    statusIdx: index('idx_blog_comments_status').on(table.status),
+    chkStatus: check('chk_blog_comments_status', sql`${table.status} IN ('pending', 'approved', 'rejected')`),
+}));

@@ -6,7 +6,7 @@ import fastifyStatic from '@fastify/static'
 import path from 'node:path'
 import { sql } from 'drizzle-orm'
 import { env } from './config/env'
-import { errorHandler, globalRateLimit } from './shared/middleware'
+import { errorHandler, globalRateLimit, initRevocationCache } from './shared/middleware'
 import dbPlugin from './shared/plugins/db.plugin'
 import { INSURANCE_TYPE_VALUES } from './shared/constants/insurance'
 
@@ -114,6 +114,11 @@ export async function buildApp() {
   await app.register(faqRoutes, { prefix: '/api/faq' })
   await app.register(aiSupportRoutes, { prefix: '/api/support' })
   await app.register(patientNotesRoutes, { prefix: '/api/patient-notes' })
+  await app.register(loginHistoryRoutes, { prefix: '/api/login-history' })
+  await app.register(blogRoutes, { prefix: '/api/blog' })
+
+  // Initialize token revocation cache
+  initRevocationCache((app as any).db)
 
   // Seed default lead sources
   const leadSourcesSvc = new LeadSourcesService((app as any).db)
@@ -179,4 +184,6 @@ import { miniAppRoutes } from './modules/miniapp'
 import { ocrRoutes } from './modules/ocr'
 import { faqRoutes, aiSupportRoutes } from './modules/support'
 import { patientNotesRoutes } from './modules/patient-notes'
+import { loginHistoryRoutes } from './modules/login-history'
+import { blogRoutes } from './modules/blog'
 import { SettingsService } from './modules/settings'

@@ -92,6 +92,27 @@
       "when": 1787088865265,
       "tag": "0012_minor_thunderbird",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787200000000,
+      "tag": "0013_add_login_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787205751800,
+      "tag": "0014_lazy_nightshade",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1787258101469,
+      "tag": "0015_gray_thanos",
+      "breakpoints": true
     }
   ]
 }

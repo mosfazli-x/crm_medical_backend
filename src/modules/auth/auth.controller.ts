@@ -3,6 +3,16 @@ import { AuthService } from './auth.service'
 import { LoginSchema, RegisterSchema, ForgotPasswordSchema, ResetPasswordSchema, UpdateProfileSchema, ChangePasswordSchema } from './auth.schema'
 import type { JwtPayload } from '../../shared/types'
 import { env } from '../../config/env'
+import { getDb } from '../../db/client'
+import { LoginHistoryService } from '../login-history/login-history.service'
+
+let _loginHistoryService: LoginHistoryService | null = null
+function getLoginHistoryService(): LoginHistoryService {
+  if (!_loginHistoryService) {
+    _loginHistoryService = new LoginHistoryService(getDb())
+  }
+  return _loginHistoryService
+}
 
 export class AuthController {
   constructor(private authService: AuthService) {}
@@ -12,11 +22,23 @@ export class AuthController {
 
     const user = await this.authService.login(dto)
 
+    let session: { id: string } | null = null
+    try {
+      session = await getLoginHistoryService().logLogin({
+        userId: user.id,
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+      })
+    } catch (err) {
+      console.error('Failed to log login event:', err)
+    }
+
     const payload: JwtPayload = {
       id: user.id,
       fullName: user.fullName,
       role: user.role,
       patientId: user.patientId,
+      sessionId: session?.id,
     }
 
     const token = request.server.jwt.sign(payload, {
@@ -41,11 +63,23 @@ export class AuthController {
 
     const newUser = await this.authService.register(dto)
 
+    let session: { id: string } | null = null
+    try {
+      session = await getLoginHistoryService().logLogin({
+        userId: newUser.id,
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+      })
+    } catch (err) {
+      console.error('Failed to log login event:', err)
+    }
+
     const payload: JwtPayload = {
       id: newUser.id,
       fullName: newUser.fullName,
       role: newUser.role,
       patientId: null,
+      sessionId: session?.id,
     }
 
     const token = request.server.jwt.sign(payload, {
@@ -108,9 +142,39 @@ export class AuthController {
 
     await this.authService.changePassword(request.user.id, dto)
 
+    try {
+      const user = request.user as any
+      if (user?.sessionId) {
+        await getLoginHistoryService().revokeAllUserSessionsExcept(user.id, user.sessionId)
+      } else {
+        await getLoginHistoryService().revokeAllUserSessionsExcept(user.id)
+      }
+    } catch (err) {
+      console.error('Failed to revoke sessions on password change:', err)
+    }
+
     return reply.send({
       success: true,
       message: 'رمز عبور با موفقیت تغییر یافت.',
+    })
+  }
+
+  async logout(request: FastifyRequest, reply: FastifyReply) {
+    const user = request.user as any
+    try {
+      await getLoginHistoryService().logLogout({
+        userId: user.id,
+        sessionId: user.sessionId,
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+      })
+    } catch (err) {
+      console.error('Failed to log logout event:', err)
+    }
+
+    return reply.send({
+      success: true,
+      message: 'با موفقیت خارج شدید.',
     })
   }
 }

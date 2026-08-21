@@ -9,3 +9,4 @@ export {
   globalRateLimit,
   honeypotProtection,
 } from './rate-limit.middleware'
+export { checkRevocation, initRevocationCache, refreshRevokedCache } from './revocation.middleware'

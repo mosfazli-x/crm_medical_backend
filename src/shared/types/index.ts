@@ -3,6 +3,7 @@ export interface JwtPayload {
   fullName: string | null
   role: string
   patientId: string | null
+  sessionId?: string
 }
 
 declare module '@fastify/jwt' {
