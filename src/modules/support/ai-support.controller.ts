@@ -1,9 +1,13 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { TicketService } from './ticket.service'
+import { KnowledgeService } from './knowledge.service'
 import { AskQuestionSchema, ConfirmAnswerSchema } from './ai-support.schema'
 
 export class AiSupportController {
-  constructor(private service: TicketService) {}
+  constructor(
+    private service: TicketService,
+    private knowledgeService: KnowledgeService,
+  ) {}
 
   async ask(request: FastifyRequest, reply: FastifyReply) {
     const dto = AskQuestionSchema.parse(request.body)
@@ -57,5 +61,14 @@ export class AiSupportController {
   async getStats(request: FastifyRequest, reply: FastifyReply) {
     const stats = await this.service.getStats()
     return reply.send({ success: true, data: stats })
+  }
+
+  async reindexKnowledgeBase(request: FastifyRequest, reply: FastifyReply) {
+    const result = await this.knowledgeService.rebuildKnowledgeBase()
+    return reply.send({
+      success: true,
+      data: result,
+      message: `Knowledge base rebuilt with ${result.chunks} chunks`,
+    })
   }
 }

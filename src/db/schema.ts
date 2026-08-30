@@ -5,7 +5,9 @@ export const patients = pgTable('patients', {
     id: uuid('id').primaryKey().defaultRandom(),
     firstName: varchar('first_name', { length: 100 }).notNull(),
     lastName: varchar('last_name', { length: 100 }).notNull(),
-    nationalId: char('national_id', { length: 10 }).unique().notNull(),
+    nationalId: char('national_id', { length: 10 }).unique(),
+    isForeign: boolean('is_foreign').default(false),
+    nationality: varchar('nationality', { length: 100 }),
     insuranceCode: varchar('insurance_code', { length: 50 }),
     insuranceType: varchar('insurance_type', { length: 50 }),
     birthDate: date('birth_date'),
@@ -1198,4 +1200,28 @@ export const blogComments = pgTable('blog_comments', {
     postIdx: index('idx_blog_comments_post').on(table.postId),
     statusIdx: index('idx_blog_comments_status').on(table.status),
     chkStatus: check('chk_blog_comments_status', sql`${table.status} IN ('pending', 'approved', 'rejected')`),
+}));
+
+// ─── AI Knowledge Base (RAG) ───
+// Embeddings are stored as JSONB float arrays (pgvector is not available on
+// the current host); cosine similarity is computed in the application layer.
+
+export const knowledgeChunks = pgTable('knowledge_chunks', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceType: varchar('source_type', { length: 20 }).notNull(),
+    sourceRef: varchar('source_ref', { length: 200 }),
+    title: text('title').notNull(),
+    content: text('content').notNull(),
+    language: varchar('language', { length: 5 }).default('both').notNull(),
+    embedding: jsonb('embedding').$type<number[] | null>(),
+    chunkIndex: integer('chunk_index').default(0).notNull(),
+    isActive: boolean('is_active').default(true).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    sourceIdx: index('idx_knowledge_chunks_source').on(table.sourceType, table.sourceRef),
+    activeIdx: index('idx_knowledge_chunks_active').on(table.isActive),
+    uniqSourceChunk: uniqueIndex('uq_knowledge_chunks_source_chunk').on(table.sourceType, table.sourceRef, table.chunkIndex),
+    chkSourceType: check('chk_knowledge_chunks_source_type', sql`${table.sourceType} IN ('faq', 'system', 'site')`),
+    chkLanguage: check('chk_knowledge_chunks_language', sql`${table.language} IN ('fa', 'en', 'both')`),
 }));

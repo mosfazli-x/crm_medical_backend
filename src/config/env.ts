@@ -52,6 +52,8 @@ const envSchema = z.object({
   // AI Support
   GEMINI_API_KEY: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
+  GEMINI_EMBEDDING_MODEL: z.string().default('text-embedding-004'),
   TELEGRAM_SUPPORT_CHAT_ID: z.string().optional(),
   SUPPORT_AI_ENABLED: z.preprocess(
     (val) => val === 'true' || val === '1' || val === true || val === 1,

@@ -6,6 +6,7 @@
     "db:generate": "dotenv drizzle-kit generate",
     "db:migrate": "dotenv drizzle-kit migrate",
     "db:push": "drizzle-kit push",
+    "kb:rebuild": "tsx scripts/build-knowledge-base.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -1,54 +1,128 @@
 import type { DB } from '../../db/client'
 import { supportTickets, users, faqEntries } from '../../db/schema'
-import { eq, and, desc, sql } from 'drizzle-orm'
+import { eq, and, desc, sql, inArray } from 'drizzle-orm'
+import { env } from '../../config/env'
 import { NotFoundError } from '../../shared/errors'
 import { FaqService } from './faq.service'
-import { aiSupportService, type FaqContextEntry } from './ai-support.service'
+import { aiSupportService, type FaqContextEntry, type KnowledgeContextEntry } from './ai-support.service'
+import { KnowledgeService, type SemanticMatch } from './knowledge.service'
 import { telegramEscalationService } from './telegram-escalation.service'
 import type { AskQuestionDto } from './ai-support.schema'
 
+interface FusedFaqMatch {
+  id: string
+  questionFa: string | null
+  answerFa: string | null
+  questionEn: string | null
+  answerEn: string | null
+  /** Lexical score from keyword/trigram search, 0..1 */
+  lexical: number
+  /** Semantic relevance mapped from embedding cosine, 0..1 */
+  semantic: number
+  /** Fusion score: max(lexical, semantic) */
+  combined: number
+}
+
 export class TicketService {
   private faqService: FaqService
+  private knowledgeService: KnowledgeService
 
   constructor(private db: DB) {
     this.faqService = new FaqService(db)
+    this.knowledgeService = new KnowledgeService(db)
   }
 
-  private async getFaqContext(question: string, language: 'fa' | 'en', category?: string): Promise<FaqContextEntry[]> {
-    try {
-      const results = await this.faqService.search({
-        q: question,
-        language,
-        category: category || undefined,
-        limit: 5,
-      })
+  /**
+   * Map embedding cosine similarity to 0..1 relevance. Related text pairs on
+   * text-embedding-004 typically land between 0.5 and 0.85.
+   */
+  private semanticRelevance(cosine: number): number {
+    return Math.max(0, Math.min(1, (cosine - 0.5) / 0.35))
+  }
 
-      return results
-        .filter(r => r.score >= 0.3)
-        .map(r => ({
-          question: language === 'fa' ? (r.questionFa || r.questionEn || '') : (r.questionEn || r.questionFa || ''),
-          answer: language === 'fa' ? (r.answerFa || r.answerEn || '') : (r.answerEn || r.answerFa || ''),
-          score: r.score,
-        }))
-    } catch {
-      return []
+  /**
+   * Hybrid retrieval: lexical keyword search over curated FAQ entries fused
+   * with semantic (embedding) search over the whole knowledge base
+   * (FAQ + system docs + public site docs). One embedding call per question.
+   */
+  private async retrieveContext(question: string, language: 'fa' | 'en', category?: string): Promise<{
+    faqMatches: FusedFaqMatch[]
+    knowledgeEntries: KnowledgeContextEntry[]
+  }> {
+    const [lexicalResults, semanticMatches] = await Promise.all([
+      this.faqService
+        .search({ q: question, language, category: category || undefined, limit: 5 })
+        .catch(() => []),
+      this.knowledgeService
+        .searchSemantic(question, 8)
+        .catch(() => [] as SemanticMatch[]),
+    ])
+
+    const byId = new Map<string, FusedFaqMatch>()
+    for (const r of lexicalResults) {
+      byId.set(r.id, {
+        id: r.id,
+        questionFa: r.questionFa,
+        answerFa: r.answerFa,
+        questionEn: r.questionEn,
+        answerEn: r.answerEn,
+        lexical: r.score,
+        semantic: 0,
+        combined: 0,
+      })
     }
+
+    // Pull full entries for FAQ items found only semantically
+    const missingIds = [...new Set(
+      semanticMatches
+        .filter(m => m.sourceType === 'faq' && m.sourceRef && !byId.has(m.sourceRef))
+        .map(m => m.sourceRef as string),
+    )]
+    if (missingIds.length > 0) {
+      const rows = await this.db
+        .select({
+          id: faqEntries.id,
+          questionFa: faqEntries.questionFa,
+          answerFa: faqEntries.answerFa,
+          questionEn: faqEntries.questionEn,
+          answerEn: faqEntries.answerEn,
+        })
+        .from(faqEntries)
+        .where(and(inArray(faqEntries.id, missingIds), eq(faqEntries.isPublished, true)))
+      for (const row of rows) {
+        byId.set(row.id, { ...row, lexical: 0, semantic: 0, combined: 0 })
+      }
+    }
+
+    for (const match of semanticMatches) {
+      if (match.sourceType !== 'faq' || !match.sourceRef) continue
+      const entry = byId.get(match.sourceRef)
+      if (entry) entry.semantic = Math.max(entry.semantic, this.semanticRelevance(match.cosine))
+    }
+
+    const faqMatches = [...byId.values()]
+      .map(entry => ({ ...entry, combined: Math.max(entry.lexical, entry.semantic) }))
+      .sort((a, b) => b.combined - a.combined)
+
+    const knowledgeEntries = semanticMatches
+      .filter(m => m.sourceType === 'system' || m.sourceType === 'site')
+      .map(m => ({ title: m.title, content: m.content }))
+
+    return { faqMatches, knowledgeEntries }
   }
 
   async askQuestion(userId: string, userName: string | undefined, dto: AskQuestionDto) {
     const startTime = Date.now()
     const { question, language, category } = dto
 
-    // Step 1: Try FAQ search first
-    const faqResults = await this.faqService.search({
-      q: question,
-      language,
-      category: category || undefined,
-      limit: 1,
-    })
+    // Step 1: Hybrid retrieval — lexical keyword matching fused with
+    // semantic search over curated FAQs + system + public-site knowledge.
+    const { faqMatches, knowledgeEntries } = await this.retrieveContext(question, language, category || undefined)
+    const best = faqMatches[0]
 
-    if (faqResults.length > 0 && faqResults[0].score >= 0.75) {
-      const faq = faqResults[0]
+    // Step 2: Verbatim-first — serve the curated answer unchanged when the
+    // match is strong lexically, or when both channels agree.
+    if (best && (best.combined >= 0.75 || (best.semantic >= 0.65 && best.lexical >= 0.45))) {
       const elapsed = Date.now() - startTime
 
       // Create a ticket showing FAQ was used
@@ -60,11 +134,11 @@ export class TicketService {
           questionLanguage: language,
           aiProvider: null,
           aiResponse: null,
-          aiResponseFa: language === 'fa' ? faq.answerFa : null,
-          aiResponseEn: language === 'en' ? faq.answerEn : null,
+          aiResponseFa: language === 'fa' ? best.answerFa : null,
+          aiResponseEn: language === 'en' ? best.answerEn : null,
           resolved: true,
           resolvedBy: 'ai',
-          resolvedAnswer: language === 'fa' ? faq.answerFa : faq.answerEn,
+          resolvedAnswer: language === 'fa' ? best.answerFa : best.answerEn,
           responseTimeMs: elapsed,
         })
         .returning()
@@ -72,19 +146,25 @@ export class TicketService {
       return {
         ticket,
         source: 'faq',
-        answer: language === 'fa' ? faq.answerFa : faq.answerEn,
-        answerFa: faq.answerFa,
-        answerEn: faq.answerEn,
-        faqId: faq.id,
+        answer: language === 'fa' ? best.answerFa : best.answerEn,
+        answerFa: best.answerFa,
+        answerEn: best.answerEn,
+        faqId: best.id,
         confidence: 1.0,
         responseTimeMs: elapsed,
       }
     }
 
-    // Step 1.5: Gather FAQ context for LLM (lower threshold = 0.15 for context)
-    const faqContext = await this.getFaqContext(question, language, category || undefined)
+    // Step 3: Grounded generation — strict system prompt allows answers only
+    // from verified FAQ entries and reference knowledge; no free invention.
+    const faqContext: FaqContextEntry[] = faqMatches.slice(0, 5)
+      .map(m => ({
+        question: language === 'fa' ? (m.questionFa || m.questionEn || '') : (m.questionEn || m.questionFa || ''),
+        answer: language === 'fa' ? (m.answerFa || m.answerEn || '') : (m.answerEn || m.answerFa || ''),
+      }))
+      .filter(e => e.question && e.answer)
 
-    // Step 2: Try Gemini
+    // Step 4: Try Gemini
     let aiResponse: string | undefined
     let aiProvider: string | undefined
     let aiConfidence: number | undefined
@@ -93,7 +173,12 @@ export class TicketService {
 
     if (aiSupportService.isGeminiAvailable()) {
       aiAttempts++
-      const geminiResult = await aiSupportService.askGemini(question, language, faqContext.length > 0 ? faqContext : undefined)
+      const geminiResult = await aiSupportService.askGemini(
+        question,
+        language,
+        faqContext.length > 0 ? faqContext : undefined,
+        knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
+      )
       aiAttemptLog.push({ provider: 'gemini', response: geminiResult.response, error: geminiResult.error })
 
       if (geminiResult.success && geminiResult.response) {
@@ -101,9 +186,14 @@ export class TicketService {
         aiProvider = 'gemini'
         aiConfidence = geminiResult.confidence
       } else if (aiSupportService.isGroqAvailable()) {
-        // Step 3: Gemini failed (rate limited, 404, key invalid, etc.) — try Groq
+        // Step 5: Gemini failed (rate limited, 404, key invalid, etc.) — try Groq
         aiAttempts++
-        const groqResult = await aiSupportService.askGroq(question, language, faqContext.length > 0 ? faqContext : undefined)
+        const groqResult = await aiSupportService.askGroq(
+          question,
+          language,
+          faqContext.length > 0 ? faqContext : undefined,
+          knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
+        )
         aiAttemptLog.push({ provider: 'groq', response: groqResult.response, error: groqResult.error })
 
         if (groqResult.success && groqResult.response) {
@@ -115,7 +205,12 @@ export class TicketService {
     } else if (aiSupportService.isGroqAvailable()) {
       // Gemini not available, try Groq directly
       aiAttempts++
-      const groqResult = await aiSupportService.askGroq(question, language, faqContext.length > 0 ? faqContext : undefined)
+      const groqResult = await aiSupportService.askGroq(
+        question,
+        language,
+        faqContext.length > 0 ? faqContext : undefined,
+        knowledgeEntries.length > 0 ? knowledgeEntries : undefined,
+      )
       aiAttemptLog.push({ provider: 'groq', response: groqResult.response, error: groqResult.error })
 
       if (groqResult.success && groqResult.response) {
@@ -136,7 +231,7 @@ export class TicketService {
           question,
           questionLanguage: language,
           aiProvider,
-          aiModel: aiProvider === 'gemini' ? 'gemini-3.5-flash-lite' : 'llama-3.3-70b-versatile',
+          aiModel: aiProvider === 'gemini' ? env.GEMINI_MODEL : 'llama-3.3-70b-versatile',
           aiResponse,
           aiConfidence,
           aiResponseFa: language === 'fa' ? aiResponse : null,

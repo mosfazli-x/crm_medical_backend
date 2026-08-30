@@ -4,7 +4,9 @@ export const CreatePatientSchema = z.object({
   patient: z.object({
     first_name: z.string().min(2, 'First name must be at least 2 characters'),
     last_name: z.string().min(2, 'Last name must be at least 2 characters'),
-    national_id: z.string().length(10, 'National ID must be exactly 10 digits'),
+    national_id: z.string().optional().nullable(),
+    is_foreign: z.boolean().optional().default(false),
+    nationality: z.string().optional().nullable(),
     insurance_code: z.string().optional().nullable(),
     insurance_type: z.enum(['social_security', 'health', 'armed_forces', 'relief_committee', 'iran', 'supplementary', 'other']).optional().nullable(),
     birth_date: z.string().nullable().optional(),
@@ -77,7 +79,9 @@ export const UpdatePatientSchema = z.object({
   patient: z.object({
     first_name: z.string().min(2).optional(),
     last_name: z.string().min(2).optional(),
-    national_id: z.string().length(10).optional(),
+    national_id: z.string().optional().nullable(),
+    is_foreign: z.boolean().optional(),
+    nationality: z.string().optional().nullable(),
     insurance_code: z.string().optional().nullable(),
     insurance_type: z.enum(['social_security', 'health', 'armed_forces', 'relief_committee', 'iran', 'supplementary', 'other']).optional().nullable(),
     birth_date: z.string().nullable().optional(),

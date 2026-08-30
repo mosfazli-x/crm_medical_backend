@@ -314,7 +314,7 @@ export class MiniAppService {
       patientId: patient.id,
       patientFirstName: firstName || 'بیمار',
       patientLastName: lastName,
-      patientNationalId: patient.nationalId,
+      patientNationalId: patient.nationalId ?? '',
       patientPhone: patient.phone || profile.user.fullName || '',
     })
   }

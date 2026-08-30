@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { env } from '../../config/env'
 import { getSystemKnowledgeDoc } from './system-knowledge'
+import { getSiteKnowledgeDoc } from './site-knowledge'
 
 interface GeminiResponse {
   candidates: Array<{
@@ -25,6 +26,11 @@ export interface FaqContextEntry {
   score?: number
 }
 
+export interface KnowledgeContextEntry {
+  title: string
+  content: string
+}
+
 export class AiSupportService {
   private geminiKey: string | null = null
   private groqKey: string | null = null
@@ -42,43 +48,73 @@ export class AiSupportService {
     return !!this.groqKey
   }
 
-  private buildSystemPrompt(language: string, faqContext?: FaqContextEntry[]): string {
-    const systemKnowledge = getSystemKnowledgeDoc()
-
-    const basePrompt = language === 'fa'
-      ? `تو یک دستیار پشتیبانی سیستم CRM کلینیک پزشکی هستی. به سوالات کاربران در مورد استفاده از سیستم پاسخ بده.
-- فقط به سوالات مربوط به استفاده از سیستم CRM پاسخ بده
-- اگر سوال پزشکی بالینی است یا ربطی به سیستم ندارد، بگو که این سوال خارج از حوزه پشتیبانی سیستم است
-- پاسخ‌ها را به زبان فارسی و مختصر و مفید بده
-- اگر مطمئن نیستی، بگو که سوال را به پشتیبانی انسانی ارجاع می‌دهی
-
-### اطلاعات کامل سیستم:
-${systemKnowledge}`
-      : `You are a support assistant for a medical clinic CRM system. Answer user questions about using the system.
-- Only answer questions about using the CRM system
-- If it's a clinical medical question or unrelated to the system, say it's outside system support scope
-- Keep answers concise and helpful
-- If unsure, say you'll escalate to human support
-
-### Complete System Knowledge:
-${systemKnowledge}`
-
-    if (!faqContext || faqContext.length === 0) {
-      return basePrompt
-    }
-
-    const faqBlock = faqContext
-      .map((entry, i) => `${i + 1}. Q: ${entry.question}\n   A: ${entry.answer}`)
-      .join('\n')
-
-    const contextIntro = language === 'fa'
-      ? '\n\n以下是从知识库中找到的与用户问题相关的参考条目。请优先参考这些条目来回答用户的问题。如果参考条目中有完全匹配的答案，请直接使用。如果只是部分相关，请结合参考条目和你的知识来回答：'
-      : '\n\nBelow are relevant FAQ entries from the knowledge base that may help answer the user\'s question. Prioritize these entries when formulating your answer. If a reference entry directly answers the question, use it. If partially relevant, combine it with your general knowledge:'
-
-    return `${basePrompt}${contextIntro}\n\n${faqBlock}`
+  get geminiModel(): string {
+    return env.GEMINI_MODEL
   }
 
-  async askGemini(question: string, language: string, faqContext?: FaqContextEntry[]): Promise<{
+  /**
+   * Strictly grounded system prompt. The model must answer from the provided
+   * knowledge base only; curated FAQ answers are to be reproduced faithfully
+   * (verbatim-first policy), never blended with outside general knowledge.
+   */
+  private buildSystemPrompt(language: string, faqContext?: FaqContextEntry[], knowledgeContext?: KnowledgeContextEntry[]): string {
+    const hasFaq = !!faqContext && faqContext.length > 0
+    const hasKnowledge = !!knowledgeContext && knowledgeContext.length > 0
+
+    const basePrompt = language === 'fa'
+      ? `تو دستیار رسمی پشتیبانی پلتفرم کلینیک هستی حسینی هستی (هم وب‌سایت عمومی و هم سیستم CRM).
+
+قوانین پاسخ‌دهی:
+1. اگر یکی از «پاسخ‌های تأییدشده» زیر مستقیماً به سوال کاربر جواب می‌دهد، همان پاسخ را عیناً ارائه کن (فقط اصلاح جزئی قالب بلامانع است). متن تأییدشده را با دانش عمومی خود ترکیب نکن.
+2. در غیر این صورت، فقط بر اساس «دانش مرجع» ارائه‌شده پاسخ بده. هیچ امکان، صفحه، قیمت، سیاست یا آدرسی که در دانش مرجع نیست را از خودت نساز.
+3. اگر پاسخ سوال در دانش مرجع وجود ندارد، بگو که سوال را به پشتیبانی انسانی ارجاع می‌دهی — حدس نزن.
+4. سوالات درمانی/بالینی خارج از حوزه توست؛ مؤدبانه اعلام کن که باید با پزشک در میان گذاشته شود.
+5. پاسخ حتماً به زبان فارسی، مختصر و مرحله‌به‌مرحله باشد. مسیر دقیق صفحات را ذکر کن.
+
+### دانش مرجع — اطلاعات کامل سیستم:
+${getSystemKnowledgeDoc()}
+
+### دانش مرجع — وب‌سایت عمومی کلینیک:
+${getSiteKnowledgeDoc()}`
+      : `You are the official support assistant for the Hasti Hosseini Clinic platform (both the public website and the CRM system).
+
+Answering rules:
+1. If one of the "verified answers" below directly addresses the user's question, reproduce that answer essentially unchanged (minor formatting fixes only). Do NOT blend verified content with your own general knowledge.
+2. Otherwise, answer ONLY from the "reference knowledge" provided. Never invent features, pages, prices, policies, or URLs that are not in it.
+3. If the reference knowledge does not cover the question, say you are escalating it to human support — do not guess.
+4. Clinical/medical advice questions are out of scope; politely state they must be discussed with a physician.
+5. Answer in English, concisely and step by step, citing exact page paths where relevant.
+
+### Reference knowledge — complete system information:
+${getSystemKnowledgeDoc()}
+
+### Reference knowledge — public clinic website:
+${getSiteKnowledgeDoc()}`
+
+    let contextBlock = ''
+    if (hasFaq) {
+      const faqBlock = faqContext!
+        .map((entry, i) => `${i + 1}. Q: ${entry.question}\n   A: ${entry.answer}`)
+        .join('\n')
+
+      contextBlock += language === 'fa'
+        ? `\n\n### پاسخ‌های تأییدشده (اولویت مطلق):\n${faqBlock}`
+        : `\n\n### Verified answers (absolute priority):\n${faqBlock}`
+    }
+    if (hasKnowledge) {
+      const knowledgeBlock = knowledgeContext!
+        .map(entry => `--- ${entry.title} ---\n${entry.content}`)
+        .join('\n\n')
+
+      contextBlock += language === 'fa'
+        ? `\n\n### بخش‌های مرتبط از دانش مرجع:\n${knowledgeBlock}`
+        : `\n\n### Relevant reference-knowledge excerpts:\n${knowledgeBlock}`
+    }
+
+    return basePrompt + contextBlock
+  }
+
+  async askGemini(question: string, language: string, faqContext?: FaqContextEntry[], knowledgeContext?: KnowledgeContextEntry[]): Promise<{
     success: boolean
     response?: string
     confidence?: number
@@ -90,18 +126,19 @@ ${systemKnowledge}`
     }
 
     try {
-      const systemPrompt = this.buildSystemPrompt(language, faqContext)
+      const systemPrompt = this.buildSystemPrompt(language, faqContext, knowledgeContext)
 
       const response = await axios.post<GeminiResponse>(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${this.geminiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiKey}`,
         {
-          contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nQuestion: ${question}` }] }],
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: question }] }],
           generationConfig: {
-            temperature: 0.3,
+            temperature: 0.2,
             maxOutputTokens: 1024,
           },
         },
-        { timeout: 15000 },
+        { timeout: 20000 },
       )
 
       const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text
@@ -112,8 +149,8 @@ ${systemKnowledge}`
       // Estimate confidence based on response characteristics
       let confidence = 0.7
       if (text.includes('مطمئن نیستم') || text.includes('I\'m not sure')) confidence = 0.4
-      if (text.includes('خارج از حوزه') || text.includes('outside scope')) confidence = 0.3
-      if (text.length > 200) confidence = 0.8
+      if (text.includes('ارجاع می‌دهم') || text.includes('escalat')) confidence = 0.35
+      if (faqContext && faqContext.length > 0 && text.length > 200) confidence = 0.8
 
       return { success: true, response: text, confidence }
     } catch (error: any) {
@@ -126,7 +163,7 @@ ${systemKnowledge}`
     }
   }
 
-  async askGroq(question: string, language: string, faqContext?: FaqContextEntry[]): Promise<{
+  async askGroq(question: string, language: string, faqContext?: FaqContextEntry[], knowledgeContext?: KnowledgeContextEntry[]): Promise<{
     success: boolean
     response?: string
     confidence?: number
@@ -138,7 +175,7 @@ ${systemKnowledge}`
     }
 
     try {
-      const systemPrompt = this.buildSystemPrompt(language, faqContext)
+      const systemPrompt = this.buildSystemPrompt(language, faqContext, knowledgeContext)
 
       const response = await axios.post<GroqResponse>(
         'https://api.groq.com/openai/v1/chat/completions',
@@ -148,12 +185,12 @@ ${systemKnowledge}`
             { role: 'system', content: systemPrompt },
             { role: 'user', content: question },
           ],
-          temperature: 0.3,
+          temperature: 0.2,
           max_tokens: 1024,
         },
         {
           headers: { Authorization: `Bearer ${this.groqKey}` },
-          timeout: 15000,
+          timeout: 20000,
         },
       )
 
@@ -164,8 +201,7 @@ ${systemKnowledge}`
 
       let confidence = 0.65
       if (text.includes('مطمئن نیستم') || text.includes('I\'m not sure')) confidence = 0.35
-      if (text.includes('خارج از حوزه') || text.includes('outside scope')) confidence = 0.3
-      if (text.length > 200) confidence = 0.75
+      if (text.includes('ارجاع می‌دهم') || text.includes('escalat')) confidence = 0.3
 
       return { success: true, response: text, confidence }
     } catch (error: any) {

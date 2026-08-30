@@ -23,6 +23,8 @@ const PATIENT_LIST_SELECT = {
   firstName: patients.firstName,
   lastName: patients.lastName,
   nationalId: patients.nationalId,
+  isForeign: patients.isForeign,
+  nationality: patients.nationality,
   phone: patients.phone,
   birthDate: patients.birthDate,
   birthDateExact: patients.birthDateExact,
@@ -58,7 +60,9 @@ export class PatientService {
         .values({
           firstName: dto.patient.first_name,
           lastName: dto.patient.last_name,
-          nationalId: dto.patient.national_id,
+          nationalId: dto.patient.national_id || null,
+          isForeign: dto.patient.is_foreign ?? false,
+          nationality: dto.patient.nationality || null,
           insuranceCode: dto.patient.insurance_code || null,
           insuranceType: dto.patient.insurance_type || null,
           birthDate: dto.patient.birth_date || null,
@@ -160,7 +164,7 @@ export class PatientService {
       }
 
       if (insertedPatient.phone) {
-        const passwordHash = await bcrypt.hash(insertedPatient.nationalId, 12)
+        const passwordHash = await bcrypt.hash(insertedPatient.phone, 12)
         await tx.insert(users).values({
           phone: insertedPatient.phone,
           passwordHash,
@@ -296,6 +300,8 @@ export class PatientService {
         firstName: patients.firstName,
         lastName: patients.lastName,
         nationalId: patients.nationalId,
+        isForeign: patients.isForeign,
+        nationality: patients.nationality,
         phone: patients.phone,
         birthDate: patients.birthDate,
         birthDateExact: patients.birthDateExact,
@@ -318,6 +324,8 @@ export class PatientService {
           firstName: patients.firstName,
           lastName: patients.lastName,
           nationalId: patients.nationalId,
+          is_foreign: patients.isForeign,
+          nationality: patients.nationality,
           insuranceCode: patients.insuranceCode,
           insuranceType: patients.insuranceType,
           birth_date: patients.birthDate,
@@ -416,6 +424,9 @@ export class PatientService {
         .set({
           ...(p.first_name !== undefined && { firstName: p.first_name }),
           ...(p.last_name !== undefined && { lastName: p.last_name }),
+          ...(p.national_id !== undefined && { nationalId: p.national_id ?? null }),
+          ...(p.is_foreign !== undefined && { isForeign: p.is_foreign }),
+          ...(p.nationality !== undefined && { nationality: p.nationality ?? null }),
           ...(p.insurance_code !== undefined && { insuranceCode: p.insurance_code ?? null }),
           ...(p.insurance_type !== undefined && { insuranceType: p.insurance_type ?? null }),
           ...(p.birth_date !== undefined && { birthDate: p.birth_date ?? null }),
