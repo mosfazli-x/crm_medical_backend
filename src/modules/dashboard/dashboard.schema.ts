@@ -38,6 +38,11 @@ export const DashboardResponseSchema = z.object({
     total_revenue: z.number(),
     pending_revenue: z.number(),
   }),
+  trend: z.array(z.object({
+    date: z.string(),
+    count: z.number(),
+    revenue: z.number(),
+  })),
   low_stock: z.object({
     count: z.number(),
     items: z.array(z.object({

@@ -1,5 +1,5 @@
 import type { DB } from '../../db/client'
-import { patients, appointments, messages, visits, billingRecords, users } from '../../db/schema'
+import { patients, appointments, messages, visits, billingRecords, users, dailyReports } from '../../db/schema'
 import { sql, eq, and, desc } from 'drizzle-orm'
 import { smsService, fileService } from '../../shared/services'
 import { NotFoundError } from '../../shared/errors'
@@ -10,7 +10,7 @@ export class DashboardService {
   constructor(private db: DB) {}
 
   async getDashboard(): Promise<DashboardResponse> {
-    const [smsCredit, storage, patientStats, appointmentStats, messageStats, visitStats, billingStats] =
+    const [smsCredit, storage, patientStats, appointmentStats, messageStats, visitStats, billingStats, trend] =
       await Promise.all([
         this.getSmsCredit(),
         this.getStorage(),
@@ -19,6 +19,7 @@ export class DashboardService {
         this.getMessageStats(),
         this.getVisitStats(),
         this.getBillingStats(),
+        this.getRevenueTrend(),
       ])
 
     return {
@@ -29,6 +30,7 @@ export class DashboardService {
       messages: messageStats,
       visits: visitStats,
       billing: billingStats,
+      trend,
     }
   }
 
@@ -247,6 +249,24 @@ export class DashboardService {
       yesterday: Number(result.yesterday),
       today: Number(result.today),
     }
+  }
+
+  private async getRevenueTrend() {
+    const result = await this.db.execute(
+      sql`SELECT ${dailyReports.reportDate}::text AS date,
+                 COUNT(*)::int AS count,
+                 COALESCE(SUM(${dailyReports.feeCollected}::numeric), 0)::text AS revenue
+          FROM ${dailyReports}
+          WHERE ${dailyReports.reportDate} >= CURRENT_DATE - INTERVAL '13 days'
+          GROUP BY ${dailyReports.reportDate}
+          ORDER BY ${dailyReports.reportDate}`
+    )
+
+    return (result.rows as Array<{ date: string; count: number; revenue: string }>).map((row) => ({
+      date: row.date,
+      count: Number(row.count),
+      revenue: Number(row.revenue),
+    }))
   }
 
   private async getBillingStats() {
