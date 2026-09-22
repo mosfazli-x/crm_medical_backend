@@ -173,6 +173,11 @@ export const ListPatientsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   q: z.string().max(100).optional(),
   marital_status: z.string().max(50).optional(),
+  insurance_type: z.enum(['social_security', 'health', 'armed_forces', 'relief_committee', 'iran', 'supplementary', 'other']).optional(),
+  created_from: z.string().optional(),
+  created_to: z.string().optional(),
+  birth_from: z.string().optional(),
+  birth_to: z.string().optional(),
   sort: z.enum([
     'created_at_desc',
     'created_at_asc',

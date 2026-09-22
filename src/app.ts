@@ -94,6 +94,7 @@ export async function buildApp() {
   await app.register(consentRoutes, { prefix: '/api/consent' })
   await app.register(telegramRoutes, { prefix: '/api/telegram' })
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' })
+  await app.register(dashboardLayoutRoutes, { prefix: '/api/dashboard-layout' })
   await app.register(staffRoutes, { prefix: '/api/staff' })
   await app.register(settingsRoutes, { prefix: '/api/settings' })
   await app.register(auditRoutes, { prefix: '/api/audit' })
@@ -165,6 +166,7 @@ import { consentRoutes } from './modules/consent'
 import { visitTypesRoutes } from './modules/visit-types'
 import { telegramRoutes } from './modules/telegram'
 import { dashboardRoutes } from './modules/dashboard'
+import { dashboardLayoutRoutes } from './modules/dashboard-layout'
 import { staffRoutes } from './modules/staff'
 import { settingsRoutes } from './modules/settings'
 import { auditRoutes } from './modules/audit'

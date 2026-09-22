@@ -10,7 +10,7 @@ import {
   attachments,
   vaccinations,
 } from '../../db/schema'
-import { eq, and, or, notInArray, asc, desc, sql, ilike, inArray } from 'drizzle-orm'
+import { eq, and, or, notInArray, asc, desc, sql, ilike, inArray, gte, lte } from 'drizzle-orm'
 import { NotFoundError, ConflictError } from '../../shared/errors'
 import { getInsuranceInfo } from '../../shared/constants/insurance'
 import { fileService } from '../../shared/services'
@@ -210,6 +210,24 @@ export class PatientService {
           ilike(patients.nationalId, pattern),
         )
       )
+    }
+
+    if (dto.insurance_type) {
+      conditions.push(eq(patients.insuranceType, dto.insurance_type))
+    }
+
+    if (dto.created_from) {
+      conditions.push(gte(patients.createdAt, new Date(dto.created_from)))
+    }
+    if (dto.created_to) {
+      conditions.push(lte(patients.createdAt, new Date(dto.created_to)))
+    }
+
+    if (dto.birth_from) {
+      conditions.push(gte(patients.birthDate, dto.birth_from))
+    }
+    if (dto.birth_to) {
+      conditions.push(lte(patients.birthDate, dto.birth_to))
     }
 
     if (dto.marital_status) {

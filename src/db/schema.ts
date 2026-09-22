@@ -721,6 +721,15 @@ export const doctorProfiles = pgTable('doctor_profiles', {
     sortIdx: sql`CREATE INDEX IF NOT EXISTS idx_doctor_profiles_sort ON doctor_profiles(sort_order)`,
 }));
 
+// ─── User Dashboard Layout (per-user dashboard customization) ───
+
+export const dashboardLayouts = pgTable('dashboard_layouts', {
+    userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+    layout: jsonb('layout').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // ─── Accounting Module ───
 
 export const chartOfAccounts = pgTable('chart_of_accounts', {
