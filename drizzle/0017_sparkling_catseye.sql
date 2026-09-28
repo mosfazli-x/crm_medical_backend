@@ -1,4 +1,4 @@
-CREATE TABLE "knowledge_chunks" (
+CREATE TABLE IF NOT EXISTS "knowledge_chunks" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"source_type" varchar(20) NOT NULL,
 	"source_ref" varchar(200),
@@ -15,8 +15,8 @@ CREATE TABLE "knowledge_chunks" (
 );
 --> statement-breakpoint
 ALTER TABLE "patients" ALTER COLUMN "national_id" DROP NOT NULL;--> statement-breakpoint
-ALTER TABLE "patients" ADD COLUMN "is_foreign" boolean DEFAULT false;--> statement-breakpoint
-ALTER TABLE "patients" ADD COLUMN "nationality" varchar(100);--> statement-breakpoint
-CREATE INDEX "idx_knowledge_chunks_source" ON "knowledge_chunks" USING btree ("source_type","source_ref");--> statement-breakpoint
-CREATE INDEX "idx_knowledge_chunks_active" ON "knowledge_chunks" USING btree ("is_active");--> statement-breakpoint
-CREATE UNIQUE INDEX "uq_knowledge_chunks_source_chunk" ON "knowledge_chunks" USING btree ("source_type","source_ref","chunk_index");
+ALTER TABLE "patients" ADD COLUMN IF NOT EXISTS "is_foreign" boolean DEFAULT false;--> statement-breakpoint
+ALTER TABLE "patients" ADD COLUMN IF NOT EXISTS "nationality" varchar(100);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_knowledge_chunks_source" ON "knowledge_chunks" USING btree ("source_type","source_ref");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_knowledge_chunks_active" ON "knowledge_chunks" USING btree ("is_active");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_knowledge_chunks_source_chunk" ON "knowledge_chunks" USING btree ("source_type","source_ref","chunk_index");

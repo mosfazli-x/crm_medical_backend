@@ -1,4 +1,4 @@
-CREATE TABLE "login_sessions" (
+CREATE TABLE IF NOT EXISTS "login_sessions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,
 	"event" varchar(20) NOT NULL,
@@ -18,9 +18,20 @@ CREATE TABLE "login_sessions" (
 	CONSTRAINT "chk_login_sessions_device_type" CHECK ("login_sessions"."device_type" IS NULL OR "login_sessions"."device_type" IN ('desktop', 'mobile', 'tablet', 'unknown'))
 );
 --> statement-breakpoint
-ALTER TABLE "login_sessions" ADD CONSTRAINT "login_sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "idx_login_sessions_user" ON "login_sessions" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "idx_login_sessions_event" ON "login_sessions" USING btree ("event");--> statement-breakpoint
-CREATE INDEX "idx_login_sessions_created" ON "login_sessions" USING btree ("created_at");--> statement-breakpoint
-CREATE INDEX "idx_login_sessions_revoked" ON "login_sessions" USING btree ("revoked");--> statement-breakpoint
-CREATE INDEX "idx_login_sessions_user_event" ON "login_sessions" USING btree ("user_id","event");
+DO $migration$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conname = 'login_sessions_user_id_users_id_fk'
+			AND conrelid = 'login_sessions'::regclass
+	) THEN
+		ALTER TABLE "login_sessions" ADD CONSTRAINT "login_sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+	END IF;
+END
+$migration$;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_login_sessions_user" ON "login_sessions" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_login_sessions_event" ON "login_sessions" USING btree ("event");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_login_sessions_created" ON "login_sessions" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_login_sessions_revoked" ON "login_sessions" USING btree ("revoked");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_login_sessions_user_event" ON "login_sessions" USING btree ("user_id","event");

@@ -12,7 +12,7 @@ export interface NotificationEvent {
   key: string
   label: string
   description: string
-  category: 'auth' | 'patient' | 'appointment' | 'messaging'
+  category: 'auth' | 'patient' | 'appointment' | 'messaging' | 'followup'
   channels: ('sms' | 'telegram')[]
   /** If true, this event is critical and cannot be fully disabled (e.g. OTP) */
   critical?: boolean
@@ -75,6 +75,15 @@ export const NOTIFICATION_EVENTS: NotificationEvent[] = [
     channels: ['sms', 'telegram'],
   },
 
+  // ── Follow-up Reminders ──
+  {
+    key: 'followup_reminder',
+    label: 'یادآوری مراجعه بعدی',
+    description: 'ارسال پیامک یادآوری به بیمار پیش از موعد مراجعه بعدی',
+    category: 'followup',
+    channels: ['sms'],
+  },
+
   // ── Messaging ──
   {
     key: 'message_patient_to_doctor',
@@ -96,6 +105,7 @@ export const NOTIFICATION_CATEGORIES = [
   { key: 'auth', label: 'احراز هویت', icon: 'mdi-shield-lock', color: 'blue' },
   { key: 'patient', label: 'مدیریت بیمار', icon: 'mdi-account-group', color: 'green' },
   { key: 'appointment', label: 'نوبت‌دهی', icon: 'mdi-calendar-clock', color: 'orange' },
+  { key: 'followup', label: 'یادآوری مراجعه', icon: 'mdi-calendar-sync', color: 'teal' },
   { key: 'messaging', label: 'پیام‌رسانی', icon: 'mdi-message-text', color: 'purple' },
 ] as const
 

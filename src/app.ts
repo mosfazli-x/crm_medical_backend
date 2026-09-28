@@ -9,6 +9,7 @@ import { env } from './config/env'
 import { errorHandler, globalRateLimit, initRevocationCache } from './shared/middleware'
 import dbPlugin from './shared/plugins/db.plugin'
 import { INSURANCE_TYPE_VALUES } from './shared/constants/insurance'
+import { startFollowUpReminderScheduler } from './shared/schedulers/followup-reminder.scheduler'
 
 export async function buildApp() {
   const app = Fastify({
@@ -52,20 +53,22 @@ export async function buildApp() {
     limits: {
       fieldNameSize: 100,
       fieldSize: 1_000_000,
-      fileSize: 10 * 1024 * 1024,
+      fileSize: env.MAX_FILE_SIZE,
       files: 50,
     },
     attachFieldsToBody: false,
   })
 
+  const uploadRoot = path.resolve(env.UPLOAD_DIR)
+
   await app.register(fastifyStatic, {
-    root: path.join(process.cwd(), 'uploads'),
+    root: uploadRoot,
     prefix: '/uploads/',
     decorateReply: false,
   })
 
   await app.register(fastifyStatic, {
-    root: path.join(process.cwd(), 'uploads', 'insurance-logos'),
+    root: path.join(uploadRoot, 'insurance-logos'),
     prefix: '/insurance-logos/',
     decorateReply: false,
   })
@@ -105,6 +108,7 @@ export async function buildApp() {
   await app.register(accountingRoutes, { prefix: '/api/accounting' })
   await app.register(inventoryRoutes, { prefix: '/api/inventory' })
   await app.register(consumablesRoutes, { prefix: '/api/consumables' })
+  await app.register(cashbookRoutes, { prefix: '/api/cashbook' })
   await app.register(patientUsageRoutes, { prefix: '/api/patient-usage' })
   await app.register(leadSourcesRoutes, { prefix: '/api/lead-sources' })
   await app.register(leadsRoutes, { prefix: '/api/leads' })
@@ -132,6 +136,9 @@ export async function buildApp() {
   // Seed default consumable items
   const consumablesSvc = new ConsumablesService((app as any).db)
   await consumablesSvc.ensureDefaults()
+
+  // Daily follow-up reminder SMS sweep
+  startFollowUpReminderScheduler((app as any).db)
 
   app.get('/health', async (_, reply) => {
     try {
@@ -181,6 +188,7 @@ import { leadSourcesRoutes, LeadSourcesService } from './modules/lead-sources'
 import { leadsRoutes } from './modules/leads'
 import { dailyReportsRoutes, DailyReportsService } from './modules/daily-reports'
 import { consumablesRoutes, ConsumablesService } from './modules/consumables'
+import { cashbookRoutes } from './modules/cashbook/cashbook.routes'
 import { scheduleRoutes } from './modules/schedule'
 import { miniAppRoutes } from './modules/miniapp'
 import { ocrRoutes } from './modules/ocr'

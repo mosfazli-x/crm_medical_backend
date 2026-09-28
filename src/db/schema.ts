@@ -1,4 +1,4 @@
-import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, integer, jsonb, decimal, real, primaryKey, check, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, serial, varchar, char, date, text, timestamp, boolean, integer, jsonb, decimal, real, bigint, primaryKey, check, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm'
 
 export const patients = pgTable('patients', {
@@ -117,14 +117,21 @@ export const visits = pgTable('visits', {
     visitDate: timestamp('visit_date').notNull(),
     durationMinutes: integer('duration_minutes').default(30),
     status: varchar('status', { length: 20 }).default('confirmed'),
-    reminderSent: boolean('reminder_sent').default(false),
 
+    /** Scheduled return/follow-up appointment for this patient. */
     nextVisitDate: timestamp('next_visit_date'),
+    /** Lead time override for the reminder SMS; NULL falls back to the clinic-wide setting. */
+    reminderDaysBefore: integer('reminder_days_before'),
+    /** When the reminder was actually delivered. Replaces the old unused boolean flag. */
+    reminderSentAt: timestamp('reminder_sent_at'),
+
     createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
     patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_visits_patient ON visits(patient_id)`,
     doctorIdx: sql`CREATE INDEX IF NOT EXISTS idx_visits_doctor ON visits(doctor_id)`,
     visitDateIdx: sql`CREATE INDEX IF NOT EXISTS idx_visits_date ON visits(visit_date)`,
+    // Drives the daily reminder sweep, which only looks at pending follow-ups.
+    nextVisitDateIdx: sql`CREATE INDEX IF NOT EXISTS idx_visits_next_visit_date ON visits(next_visit_date) WHERE next_visit_date IS NOT NULL`,
 }));
 
 export const pregnancies = pgTable('pregnancies', {
@@ -248,6 +255,92 @@ export const users = pgTable('users', {
       )`),
     };
 });
+
+export const cashbookCategories = pgTable('cashbook_categories', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 120 }).notNull(),
+    kind: varchar('kind', { length: 20 }).notNull(),
+    color: varchar('color', { length: 7 }),
+    isArchived: boolean('is_archived').default(false).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    userKindIdx: index('idx_cashbook_categories_user_kind').on(table.userId, table.kind, table.isArchived),
+    userNameUnique: uniqueIndex('uq_cashbook_categories_user_kind_name').on(table.userId, table.kind, table.name),
+    kindCheck: check('chk_cashbook_categories_kind', sql`${table.kind} IN ('income', 'expense')`),
+}));
+
+export const cashbookAccounts = pgTable('cashbook_accounts', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 120 }).notNull(),
+    type: varchar('type', { length: 30 }).default('cash').notNull(),
+    openingBalanceRial: bigint('opening_balance_rial', { mode: 'bigint' }).default(sql`0`).notNull(),
+    isArchived: boolean('is_archived').default(false).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    userIdx: index('idx_cashbook_accounts_user').on(table.userId, table.isArchived),
+    userNameUnique: uniqueIndex('uq_cashbook_accounts_user_name').on(table.userId, table.name),
+    typeCheck: check('chk_cashbook_accounts_type', sql`${table.type} IN ('cash', 'bank', 'card', 'other')`),
+}));
+
+export const cashbookEntries = pgTable('cashbook_entries', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    entryDate: date('entry_date').notNull(),
+    kind: varchar('kind', { length: 20 }).notNull(),
+    amountRial: bigint('amount_rial', { mode: 'bigint' }).notNull(),
+    categoryId: uuid('category_id').notNull().references(() => cashbookCategories.id),
+    accountId: uuid('account_id').notNull().references(() => cashbookAccounts.id),
+    description: text('description').notNull(),
+    notes: text('notes'),
+    reference: varchar('reference', { length: 100 }),
+    status: varchar('status', { length: 20 }).default('active').notNull(),
+    voidReason: text('void_reason'),
+    voidedAt: timestamp('voided_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    userDateIdx: index('idx_cashbook_entries_user_date').on(table.userId, table.entryDate),
+    userStatusIdx: index('idx_cashbook_entries_user_status').on(table.userId, table.status),
+    categoryIdx: index('idx_cashbook_entries_category').on(table.categoryId),
+    accountIdx: index('idx_cashbook_entries_account').on(table.accountId),
+    kindCheck: check('chk_cashbook_entries_kind', sql`${table.kind} IN ('income', 'expense')`),
+    statusCheck: check('chk_cashbook_entries_status', sql`${table.status} IN ('active', 'voided')`),
+    amountCheck: check('chk_cashbook_entries_amount', sql`${table.amountRial} > 0`),
+}));
+
+export const cashbookReceipts = pgTable('cashbook_receipts', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    entryId: uuid('entry_id').notNull().unique().references(() => cashbookEntries.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    storageKey: text('storage_key').notNull(),
+    originalName: text('original_name').notNull(),
+    mimeType: varchar('mime_type', { length: 100 }).notNull(),
+    fileSize: integer('file_size').notNull(),
+    fileHash: varchar('file_hash', { length: 64 }).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    userIdx: index('idx_cashbook_receipts_user').on(table.userId),
+    sizeCheck: check('chk_cashbook_receipts_size', sql`${table.fileSize} > 0`),
+}));
+
+export const cashbookBudgets = pgTable('cashbook_budgets', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    categoryId: uuid('category_id').notNull().references(() => cashbookCategories.id),
+    month: varchar('month', { length: 7 }).notNull(),
+    amountRial: bigint('amount_rial', { mode: 'bigint' }).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    userMonthIdx: index('idx_cashbook_budgets_user_month').on(table.userId, table.month),
+    userCategoryMonthUnique: uniqueIndex('uq_cashbook_budgets_user_category_month').on(table.userId, table.categoryId, table.month),
+    monthCheck: check('chk_cashbook_budgets_month', sql`${table.month} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
+    amountCheck: check('chk_cashbook_budgets_amount', sql`${table.amountRial} > 0`),
+}));
 
 export const otpCodes = pgTable('otp_codes', {
     id: uuid('id').primaryKey().defaultRandom(),

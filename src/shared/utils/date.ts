@@ -1,13 +1,20 @@
 import { toJalaali, toGregorian, jalaaliMonthLength } from 'jalaali-js'
 
+const JALALI_MONTH_NAMES = [
+  'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
+  'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند',
+]
+
 export function gregorianToJalaliStr(dateStr: string): string {
   const [year, month, day] = dateStr.split('-').map(Number)
   const j = toJalaali(year, month, day)
-  const monthNames = [
-    'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
-    'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند',
-  ]
-  return `${j.jd} ${monthNames[j.jm - 1]} ${j.jy}`
+  return `${j.jd} ${JALALI_MONTH_NAMES[j.jm - 1]} ${j.jy}`
+}
+
+/** Jalali day rendering for a timestamp, e.g. `۱۴ مهر ۱۴۰۴`. */
+export function dateToJalaliStr(date: Date): string {
+  const j = toJalaali(date.getFullYear(), date.getMonth() + 1, date.getDate())
+  return `${j.jd} ${JALALI_MONTH_NAMES[j.jm - 1]} ${j.jy}`
 }
 
 export function getTodayJalali(): string {

@@ -63,6 +63,22 @@ export class SmsService {
     return Number(val) > 0
   }
 
+  /**
+   * Whether a real SMS delivery would actually be attempted right now.
+   *
+   * `send()` is intentionally fail-open (it returns true when the channel is off)
+   * so non-critical notifications never surface as failures. Callers that must
+   * distinguish "delivered" from "silently skipped" — such as follow-up reminder
+   * bookkeeping — should gate on this first.
+   */
+  async isEnabled(): Promise<boolean> {
+    if (!env.SMS_ENABLED) return false
+    if (!env.SMS_USERNAME || !env.SMS_PASSWORD || !env.SMS_LINE) return false
+    const smsEnabled = await this.getSettingValue('sms_enabled')
+    if (smsEnabled === 'false') return false
+    return this.hasCredit()
+  }
+
   async send(mobile: string, text: string): Promise<boolean> {
     if (!env.SMS_ENABLED) {
       return true

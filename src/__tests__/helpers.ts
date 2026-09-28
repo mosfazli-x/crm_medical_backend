@@ -9,6 +9,8 @@ interface ApiResponse<T = any> {
   user?: any
   details?: any
   pagination?: { page: number; limit: number; total: number; totalPages: number; hasMore?: boolean }
+  /** Visits endpoints return the affected row under `visit`. */
+  visit?: any
 }
 
 async function request<T = any>(

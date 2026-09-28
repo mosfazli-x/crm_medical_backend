@@ -145,6 +145,25 @@ export class S3StorageProvider {
     }
   }
 
+  async putPrivateFile(
+    key: string,
+    buffer: Buffer,
+    contentType: string,
+    metadata: Record<string, string> = {}
+  ): Promise<{ key: string; fileSize: number; fileHash: string }> {
+    const fileHash = this.computeHash(buffer)
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        Metadata: metadata,
+      })
+    )
+    return { key, fileSize: buffer.length, fileHash }
+  }
+
   async deleteFile(key: string): Promise<void> {
     try {
       await this.client.send(

@@ -28,6 +28,7 @@ const envSchema = z.object({
 
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   UPLOAD_DIR: z.string().default('uploads'),
+  CASHBOOK_RECEIPT_DIR: z.string().default('private/cashbook-receipts'),
   BACKUP_DIR: z.string().optional(),
   BACKUP_ENABLED: z.preprocess(
     (val) => val === 'true' || val === '1' || val === true || val === 1,
@@ -48,6 +49,14 @@ const envSchema = z.object({
 
   OCR_SPACE_API_KEY: z.string().optional(),
   OCR_SPACE_PROXY: z.string().url().optional(),
+
+  // Follow-up reminder scheduler
+  FOLLOWUP_REMINDER_ENABLED: z.preprocess(
+    (val) => val === 'true' || val === '1' || val === true || val === 1,
+    z.boolean()
+  ).default(true),
+  FOLLOWUP_REMINDER_HOUR: z.coerce.number().int().min(0).max(23).default(9),
+  FOLLOWUP_REMINDER_MINUTE: z.coerce.number().int().min(0).max(59).default(0),
 
   // AI Support
   GEMINI_API_KEY: z.string().optional(),

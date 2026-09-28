@@ -134,6 +134,27 @@
       "when": 1789727292748,
       "tag": "0018_faithful_supernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790325274047,
+      "tag": "0019_green_famine",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790453042475,
+      "tag": "0020_fat_colonel_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790453055917,
+      "tag": "0021_gray_screwball",
+      "breakpoints": true
     }
   ]
 }

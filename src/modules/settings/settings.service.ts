@@ -96,6 +96,11 @@ export class SettingsService {
       { key: 'sms_credit', value: '1000', description: 'اعتبار باقی‌مانده پیامک (تعداد پیامک)' },
       { key: 'sms_sent', value: '0', description: 'تعداد پیامک‌های ارسال شده' },
       { key: 'sms_enabled', value: 'true', description: 'فعال/غیرفعال بودن ارسال پیامک' },
+      {
+        key: 'followup_reminder_days',
+        value: '3',
+        description: 'تعداد روز قبل از موعد مراجعه بعدی برای ارسال یادآوری (پیش‌فرض کلینیک)',
+      },
     ]
     for (const d of coreDefaults) {
       const existing = await this.getByKey(d.key)
