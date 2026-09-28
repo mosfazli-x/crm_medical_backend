@@ -8,6 +8,13 @@ import {
   CreateBlogCategorySchema,
 } from './blog.schema'
 
+/** Query strings are untrusted: page/limit must be finite positive integers. */
+function toPositiveInt(value: unknown, fallback: number, max: number): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback
+  return Math.min(Math.floor(parsed), max)
+}
+
 export class BlogController {
   constructor(private service: BlogService) {}
 
@@ -28,9 +35,25 @@ export class BlogController {
   // ─── Posts (admin) ────────────────────────────────
 
   async listAllPosts(request: FastifyRequest, reply: FastifyReply) {
-    const { page = 1, limit = 20 } = request.query as any
-    const result = await this.service.listAllPosts(Number(page), Number(limit))
+    const { page = 1, limit = 20, q, status, category_id, sort } = request.query as any
+    const result = await this.service.listAllPosts(Number(page), Number(limit), {
+      q: typeof q === 'string' ? q : undefined,
+      status: status === 'published' || status === 'draft' ? status : undefined,
+      categoryId: typeof category_id === 'string' ? category_id : undefined,
+      sort: sort === 'oldest' || sort === 'title' || sort === 'views' ? sort : 'newest',
+    })
     return reply.send({ success: true, data: result.data, pagination: result.pagination })
+  }
+
+  async getAdminStats(request: FastifyRequest, reply: FastifyReply) {
+    const stats = await this.service.getAdminStats()
+    return reply.send({ success: true, data: stats })
+  }
+
+  async getPostById(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = request.params as { id: string }
+    const post = await this.service.getPostById(id)
+    return reply.send({ success: true, data: post })
   }
 
   async createPost(request: FastifyRequest, reply: FastifyReply) {
@@ -68,8 +91,16 @@ export class BlogController {
   }
 
   async listAllComments(request: FastifyRequest, reply: FastifyReply) {
-    const { page = 1, limit = 20, status } = request.query as any
-    const result = await this.service.listAllComments(Number(page), Number(limit), status)
+    const { page, limit, status, q, sort } = request.query as any
+    const result = await this.service.listAllComments(
+      toPositiveInt(page, 1, 10_000),
+      toPositiveInt(limit, 20, 100),
+      {
+        q: typeof q === 'string' ? q : undefined,
+        status: status === 'pending' || status === 'approved' || status === 'rejected' ? status : undefined,
+        sort: sort === 'oldest' ? 'oldest' : 'newest',
+      }
+    )
     return reply.send({ success: true, data: result.data, pagination: result.pagination })
   }
 

@@ -43,7 +43,9 @@ export async function blogRoutes(fastify: FastifyInstance) {
     })
   })
 
+  fastify.get('/admin/stats', { preHandler: requireRole('admin_doctor') }, (req, rep) => controller.getAdminStats(req, rep))
   fastify.get('/admin/posts', { preHandler: requireRole('admin_doctor') }, (req, rep) => controller.listAllPosts(req, rep))
+  fastify.get<{ Params: { id: string } }>('/admin/posts/:id', { preHandler: requireRole('admin_doctor') }, (req, rep) => controller.getPostById(req, rep))
   fastify.post('/posts', { preHandler: requireRole('admin_doctor') }, (req, rep) => controller.createPost(req, rep))
   fastify.patch<{ Params: { id: string } }>('/posts/:id', { preHandler: requireRole('admin_doctor') }, (req, rep) => controller.updatePost(req, rep))
   fastify.delete<{ Params: { id: string } }>('/posts/:id', { preHandler: requireRole('admin_doctor') }, (req, rep) => controller.deletePost(req, rep))

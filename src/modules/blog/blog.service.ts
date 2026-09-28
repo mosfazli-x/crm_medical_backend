@@ -1,6 +1,6 @@
 import type { DB } from '../../db/client'
 import { blogPosts, blogComments, blogCategories, users } from '../../db/schema'
-import { eq, and, desc, sql, ilike, or, SQL } from 'drizzle-orm'
+import { eq, and, asc, desc, sql, ilike, isNull, or, SQL } from 'drizzle-orm'
 import { NotFoundError, ConflictError } from '../../shared/errors'
 import type { CreateBlogPostDto, UpdateBlogPostDto, CreateBlogCommentDto, CreateBlogCategoryDto } from './blog.schema'
 
@@ -27,6 +27,65 @@ function slugify(text: string): string {
 
   // Fallback: if slug is empty (e.g. all special chars), use a timestamp-based slug
   return slug || `post-${Date.now()}`
+}
+
+export type PostSort = 'newest' | 'oldest' | 'title' | 'views'
+export type PostStatusFilter = 'published' | 'draft'
+export type CommentStatus = 'pending' | 'approved' | 'rejected'
+
+export interface ListAllPostsOptions {
+  /** Free-text match across title (fa/en), slug and excerpt. */
+  q?: string
+  status?: PostStatusFilter
+  categoryId?: string
+  /** 'none' matches posts with no category. */
+  sort?: PostSort
+}
+
+export interface ListAllCommentsOptions {
+  /** Free-text match across the author, their email, the body and the article title. */
+  q?: string
+  status?: CommentStatus
+  /** 'oldest' surfaces the longest-waiting moderation queue first. */
+  sort?: 'newest' | 'oldest'
+}
+
+/** Every column needed to render or edit one post. */
+const POST_DETAIL_COLUMNS = {
+  id: blogPosts.id,
+  titleFa: blogPosts.titleFa,
+  titleEn: blogPosts.titleEn,
+  slug: blogPosts.slug,
+  excerptFa: blogPosts.excerptFa,
+  excerptEn: blogPosts.excerptEn,
+  contentFa: blogPosts.contentFa,
+  contentEn: blogPosts.contentEn,
+  coverImage: blogPosts.coverImage,
+  categoryId: blogPosts.categoryId,
+  authorId: blogPosts.authorId,
+  isPublished: blogPosts.isPublished,
+  publishedAt: blogPosts.publishedAt,
+  viewCount: blogPosts.viewCount,
+  createdAt: blogPosts.createdAt,
+  updatedAt: blogPosts.updatedAt,
+  authorName: users.fullName,
+}
+
+const POST_LIST_COLUMNS = {
+  id: blogPosts.id,
+  titleFa: blogPosts.titleFa,
+  titleEn: blogPosts.titleEn,
+  slug: blogPosts.slug,
+  excerptFa: blogPosts.excerptFa,
+  coverImage: blogPosts.coverImage,
+  categoryId: blogPosts.categoryId,
+  authorId: blogPosts.authorId,
+  isPublished: blogPosts.isPublished,
+  publishedAt: blogPosts.publishedAt,
+  viewCount: blogPosts.viewCount,
+  createdAt: blogPosts.createdAt,
+  updatedAt: blogPosts.updatedAt,
+  authorName: users.fullName,
 }
 
 export class BlogService {
@@ -86,28 +145,11 @@ export class BlogService {
 
   async getPostBySlug(slug: string) {
     const [post] = await this.db
-      .select({
-        id: blogPosts.id,
-        titleFa: blogPosts.titleFa,
-        titleEn: blogPosts.titleEn,
-        slug: blogPosts.slug,
-        excerptFa: blogPosts.excerptFa,
-        excerptEn: blogPosts.excerptEn,
-        contentFa: blogPosts.contentFa,
-        contentEn: blogPosts.contentEn,
-        coverImage: blogPosts.coverImage,
-        categoryId: blogPosts.categoryId,
-        authorId: blogPosts.authorId,
-        isPublished: blogPosts.isPublished,
-        publishedAt: blogPosts.publishedAt,
-        viewCount: blogPosts.viewCount,
-        createdAt: blogPosts.createdAt,
-        updatedAt: blogPosts.updatedAt,
-        authorName: users.fullName,
-      })
+      .select(POST_DETAIL_COLUMNS)
       .from(blogPosts)
       .leftJoin(users, eq(blogPosts.authorId, users.id))
-      .where(eq(blogPosts.slug, slug))
+      // Unpublished drafts must never be readable through the public route.
+      .where(and(eq(blogPosts.slug, slug), eq(blogPosts.isPublished, true)))
       .limit(1)
 
     if (!post) throw new NotFoundError('Blog post')
@@ -120,37 +162,79 @@ export class BlogService {
     return { ...post, viewCount: (post.viewCount || 0) + 1 }
   }
 
+  /** Full post for the admin editor. Deliberately does NOT touch viewCount. */
+  async getPostById(id: string) {
+    const [post] = await this.db
+      .select(POST_DETAIL_COLUMNS)
+      .from(blogPosts)
+      .leftJoin(users, eq(blogPosts.authorId, users.id))
+      .where(eq(blogPosts.id, id))
+      .limit(1)
+
+    if (!post) throw new NotFoundError('Blog post')
+    return post
+  }
+
   // ─── Posts (admin) ────────────────────────────────
 
-  async listAllPosts(page = 1, limit = 20) {
+  async listAllPosts(page = 1, limit = 20, options: ListAllPostsOptions = {}) {
     const offset = (page - 1) * limit
+    const conditions: SQL[] = []
+
+    const term = options.q?.trim()
+    if (term) {
+      // Every whitespace-separated term must match somewhere, so " implant ezdi"
+      // narrows rather than widens the result set.
+      for (const word of term.split(/\s+/).filter(Boolean)) {
+        const like = `%${word}%`
+        conditions.push(
+          or(
+            ilike(blogPosts.titleFa, like),
+            ilike(blogPosts.titleEn, like),
+            ilike(blogPosts.slug, like),
+            ilike(blogPosts.excerptFa, like)
+          )!
+        )
+      }
+    }
+
+    if (options.status === 'published') conditions.push(eq(blogPosts.isPublished, true))
+    if (options.status === 'draft') conditions.push(eq(blogPosts.isPublished, false))
+
+    if (options.categoryId === 'none') {
+      conditions.push(isNull(blogPosts.categoryId))
+    } else if (options.categoryId) {
+      conditions.push(eq(blogPosts.categoryId, options.categoryId))
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+
+    const orderBy = (() => {
+      switch (options.sort) {
+        case 'oldest':
+          return asc(blogPosts.createdAt)
+        case 'title':
+          return asc(blogPosts.titleFa)
+        case 'views':
+          return desc(sql`${blogPosts.viewCount} nulls last`)
+        default:
+          return desc(blogPosts.createdAt)
+      }
+    })()
 
     const [data, countResult] = await Promise.all([
       this.db
-        .select({
-          id: blogPosts.id,
-          titleFa: blogPosts.titleFa,
-          titleEn: blogPosts.titleEn,
-          slug: blogPosts.slug,
-          excerptFa: blogPosts.excerptFa,
-          coverImage: blogPosts.coverImage,
-          categoryId: blogPosts.categoryId,
-          authorId: blogPosts.authorId,
-          isPublished: blogPosts.isPublished,
-          publishedAt: blogPosts.publishedAt,
-          viewCount: blogPosts.viewCount,
-          createdAt: blogPosts.createdAt,
-          updatedAt: blogPosts.updatedAt,
-          authorName: users.fullName,
-        })
+        .select(POST_LIST_COLUMNS)
         .from(blogPosts)
         .leftJoin(users, eq(blogPosts.authorId, users.id))
-        .orderBy(desc(blogPosts.createdAt))
+        .where(whereClause)
+        .orderBy(orderBy)
         .limit(limit)
         .offset(offset),
       this.db
         .select({ count: sql<number>`count(*)` })
-        .from(blogPosts),
+        .from(blogPosts)
+        .where(whereClause),
     ])
 
     return {
@@ -161,6 +245,50 @@ export class BlogService {
         total: Number(countResult[0]?.count || 0),
         totalPages: Math.ceil(Number(countResult[0]?.count || 0) / limit),
       },
+    }
+  }
+
+  /**
+   * Aggregate counts for the admin dashboard. Uses COUNT(*) FILTER so the whole
+   * summary costs one round trip per table.
+   */
+  async getAdminStats() {
+    const [postRow] = await this.db
+      .select({
+        total: sql<number>`count(*)`,
+        published: sql<number>`count(*) filter (where ${blogPosts.isPublished} is true)`,
+        drafts: sql<number>`count(*) filter (where ${blogPosts.isPublished} is false)`,
+        totalViews: sql<number>`coalesce(sum(${blogPosts.viewCount}), 0)`,
+        uncategorized: sql<number>`count(*) filter (where ${blogPosts.categoryId} is null)`,
+      })
+      .from(blogPosts)
+
+    const [commentRow] = await this.db
+      .select({
+        pending: sql<number>`count(*) filter (where ${blogComments.status} = 'pending')`,
+        approved: sql<number>`count(*) filter (where ${blogComments.status} = 'approved')`,
+        rejected: sql<number>`count(*) filter (where ${blogComments.status} = 'rejected')`,
+      })
+      .from(blogComments)
+
+    const [categoryRow] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(blogCategories)
+
+    return {
+      posts: {
+        total: Number(postRow?.total || 0),
+        published: Number(postRow?.published || 0),
+        drafts: Number(postRow?.drafts || 0),
+        uncategorized: Number(postRow?.uncategorized || 0),
+        totalViews: Number(postRow?.totalViews || 0),
+      },
+      comments: {
+        pending: Number(commentRow?.pending || 0),
+        approved: Number(commentRow?.approved || 0),
+        rejected: Number(commentRow?.rejected || 0),
+      },
+      categories: Number(categoryRow?.count || 0),
     }
   }
 
@@ -279,12 +407,29 @@ export class BlogService {
     return comment
   }
 
-  async listAllComments(page = 1, limit = 20, status?: string) {
+  async listAllComments(page = 1, limit = 20, options: ListAllCommentsOptions = {}) {
     const offset = (page - 1) * limit
     const conditions: SQL[] = []
-    if (status) {
-      conditions.push(eq(blogComments.status, status))
+
+    const term = options.q?.trim()
+    if (term) {
+      // Every whitespace-separated term must match somewhere, so " Reza dental "
+      // narrows the result set instead of widening it.
+      for (const word of term.split(/\s+/).filter(Boolean)) {
+        const like = `%${word}%`
+        conditions.push(
+          or(
+            ilike(blogComments.authorName, like),
+            ilike(blogComments.authorEmail, like),
+            ilike(blogComments.content, like),
+            ilike(blogPosts.titleFa, like)
+          )!
+        )
+      }
     }
+
+    if (options.status) conditions.push(eq(blogComments.status, options.status))
+
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
     const [data, countResult] = await Promise.all([
@@ -303,7 +448,7 @@ export class BlogService {
         .from(blogComments)
         .leftJoin(blogPosts, eq(blogComments.postId, blogPosts.id))
         .where(whereClause)
-        .orderBy(desc(blogComments.createdAt))
+        .orderBy(options.sort === 'oldest' ? asc(blogComments.createdAt) : desc(blogComments.createdAt))
         .limit(limit)
         .offset(offset),
       this.db
