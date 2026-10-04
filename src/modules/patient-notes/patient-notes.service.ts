@@ -1,5 +1,5 @@
 import type { DB } from '../../db/client'
-import { patientNotes, users } from '../../db/schema'
+import { patientNotes, users, doctorProfiles } from '../../db/schema'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { NotFoundError } from '../../shared/errors'
 
@@ -13,6 +13,7 @@ export class PatientNotesService {
         patientId: patientNotes.patientId,
         doctorId: patientNotes.doctorId,
         doctorName: users.fullName,
+        doctorSpecialty: doctorProfiles.specialty,
         content: patientNotes.content,
         eventType: patientNotes.eventType,
         eventDate: patientNotes.eventDate,
@@ -21,6 +22,7 @@ export class PatientNotesService {
       })
       .from(patientNotes)
       .leftJoin(users, eq(patientNotes.doctorId, users.id))
+      .leftJoin(doctorProfiles, eq(doctorProfiles.doctorId, patientNotes.doctorId))
       .where(and(eq(patientNotes.patientId, patientId), eq(patientNotes.isDeleted, false)))
       .orderBy(desc(patientNotes.eventDate), desc(patientNotes.createdAt))
   }

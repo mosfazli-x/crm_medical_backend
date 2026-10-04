@@ -3,9 +3,9 @@ import {
   patients, visits, appointments, prescriptions, labResults, labOrders,
   screeningSchedules, screeningResults, pregnancies, vaccinations,
   clinicalAssessments, billingRecords, messages, dailyReports, vitalSigns,
-  patientNotes, users, diseases, medications, allergies,
+  patientNotes, users, doctorProfiles, diseases, medications, allergies,
 } from '../../db/schema'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, inArray } from 'drizzle-orm'
 
 export interface TimelineEvent {
   id: string
@@ -16,6 +16,8 @@ export interface TimelineEvent {
   details: Record<string, any>
   color: string
   icon: string
+  doctorName?: string | null
+  doctorSpecialty?: string | null
 }
 
 function toDateStr(val: any): string | null {
@@ -74,9 +76,11 @@ export class PatientTimelineService {
         eventDate: patientNotes.eventDate,
         createdAt: patientNotes.createdAt,
         doctorName: users.fullName,
+        doctorSpecialty: doctorProfiles.specialty,
       })
         .from(patientNotes)
         .leftJoin(users, eq(patientNotes.doctorId, users.id))
+        .leftJoin(doctorProfiles, eq(doctorProfiles.doctorId, patientNotes.doctorId))
         .where(and(eq(patientNotes.patientId, patientId), eq(patientNotes.isDeleted, false)))
         .orderBy(desc(patientNotes.eventDate), desc(patientNotes.createdAt)),
       this.db.select().from(diseases).where(eq(diseases.patientId, patientId)),
@@ -85,6 +89,38 @@ export class PatientTimelineService {
     ])
 
     if (patient.length === 0) return { patient: null, events: [] }
+
+    // ─── Doctor directory ───────────────────────────────────────
+    // Resolve name + specialty once for every doctor referenced by
+    // this patient's record so each event can show who was involved.
+    const doctorIds = new Set<string>()
+    const collect = (id?: string | null) => { if (id) doctorIds.add(id) }
+    for (const v of visitsList) collect(v.doctorId)
+    for (const a of appointmentsList) collect(a.doctorId)
+    for (const p of prescriptionsList) collect(p.doctorId)
+    for (const lo of labOrdersList) collect(lo.doctorId)
+    for (const lr of labResultsList) collect(lr.validatedById)
+
+    const doctorById = new Map<string, { name: string | null; specialty: string | null }>()
+    if (doctorIds.size > 0) {
+      const doctorRows = await this.db
+        .select({ id: users.id, fullName: users.fullName, specialty: doctorProfiles.specialty })
+        .from(users)
+        .leftJoin(doctorProfiles, eq(doctorProfiles.doctorId, users.id))
+        .where(inArray(users.id, [...doctorIds]))
+
+      for (const row of doctorRows) {
+        doctorById.set(row.id, { name: row.fullName, specialty: row.specialty })
+      }
+    }
+
+    const withDoctor = (doctorId?: string | null) => {
+      const doctor = doctorId ? doctorById.get(doctorId) : undefined
+      return {
+        doctorName: doctor?.name ?? null,
+        doctorSpecialty: doctor?.specialty ?? null,
+      }
+    }
 
     for (const v of visitsList) {
       events.push({
@@ -96,6 +132,7 @@ export class PatientTimelineService {
         details: { visitType: v.visitType, status: v.status, duration: v.durationMinutes, nextVisit: v.nextVisitDate },
         color: '#4F46E5',
         icon: 'stethoscope',
+        ...withDoctor(v.doctorId),
       })
     }
 
@@ -109,6 +146,7 @@ export class PatientTimelineService {
         details: { status: a.status, startTime: a.startTime, endTime: a.endTime },
         color: '#7C3AED',
         icon: 'calendar-clock',
+        ...withDoctor(a.doctorId),
       })
     }
 
@@ -122,6 +160,7 @@ export class PatientTimelineService {
         details: { dosage: p.dosage, frequency: p.frequency, route: p.route, duration: p.duration, instructions: p.instructions, isActive: p.isActive },
         color: '#059669',
         icon: 'pill',
+        ...withDoctor(p.doctorId),
       })
     }
 
@@ -135,6 +174,7 @@ export class PatientTimelineService {
         details: { testName: lr.testName, value: lr.value, unit: lr.unit, referenceRangeLow: lr.referenceRangeLow, referenceRangeHigh: lr.referenceRangeHigh, isAbnormal: lr.isAbnormal, category: lr.category },
         color: lr.isAbnormal ? '#DC2626' : '#2563EB',
         icon: 'flask',
+        ...withDoctor(lr.validatedById),
       })
     }
 
@@ -148,6 +188,7 @@ export class PatientTimelineService {
         details: { status: lo.status, notes: lo.notes },
         color: '#6366F1',
         icon: 'clipboard-list',
+        ...withDoctor(lo.doctorId),
       })
     }
 
@@ -278,6 +319,8 @@ export class PatientTimelineService {
         details: { eventType: n.eventType, doctorName: n.doctorName },
         color: '#F97316',
         icon: 'note-text',
+        doctorName: n.doctorName,
+        doctorSpecialty: n.doctorSpecialty,
       })
     }
 
