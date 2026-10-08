@@ -45,6 +45,8 @@ describe('Cashbook API', () => {
   let patientToken = ''
   let doctorId = ''
   let otherDoctorId = ''
+  let adminId = ''
+  let patientId = ''
   let expenseCategoryId = ''
   let incomeCategoryId = ''
   let accountId = ''
@@ -68,6 +70,8 @@ describe('Cashbook API', () => {
     return (response.body.data as CashbookEntryData).id
   }
 
+  // Registration costs a bcrypt round per account, so this fixture (four staff plus
+  // their ledgers and approvals) needs more than vitest's default 10s hook budget.
   beforeAll(async () => {
     const doctor = await registerTestUser('doctor')
     const otherDoctor = await registerTestUser('doctor')
@@ -79,6 +83,8 @@ describe('Cashbook API', () => {
     patientToken = patient.token
     doctorId = doctor.user.id
     otherDoctorId = otherDoctor.user.id
+    adminId = admin.user.id
+    patientId = patient.user.id
 
     const account = await api.post('/api/cashbook/accounts', {
       name: `Cashbook account ${suffix}`,
@@ -108,7 +114,14 @@ describe('Cashbook API', () => {
     expenseEntryId = await createEntry('expense', `Expense ${suffix}`, '1000')
     voidEntryId = await createEntry('expense', `Voided expense ${suffix}`, '250')
     receiptEntryId = await createEntry('expense', `Receipt expense ${suffix}`, '300')
-  })
+
+    // Ledger sharing only targets active accounts, and registration starts staff as
+    // pending. Approve the accounts that take part in the sharing assertions.
+    for (const id of [doctorId, otherDoctorId, adminId]) {
+      const approval = await api.post(`/api/users/approve/${id}`, undefined, adminToken)
+      expect(approval.status).toBe(200)
+    }
+  }, 60000)
 
   it('requires authentication and the doctor or admin role', async () => {
     expect((await api.get('/api/cashbook/summary')).status).toBe(401)
@@ -163,18 +176,114 @@ describe('Cashbook API', () => {
     expect(editVoided.status).toBe(400)
   })
 
-  it('enforces owner isolation while allowing admin oversight', async () => {
+  it('isolates ledgers by default: role alone never grants access', async () => {
     const doctorRead = await api.get(`/api/cashbook/entries?userId=${otherDoctorId}`, doctorToken)
     expect(doctorRead.status).toBe(403)
 
+    // A clinic manager has no implicit claim on another user's ledger.
     const adminRead = await api.get(`/api/cashbook/entries?userId=${doctorId}`, adminToken)
-    expect(adminRead.status).toBe(200)
+    expect(adminRead.status).toBe(403)
+
+    const adminSummary = await api.get(`/api/cashbook/summary?userId=${doctorId}`, adminToken)
+    expect(adminSummary.status).toBe(403)
+
+    const adminAccounts = await api.get(`/api/cashbook/accounts?userId=${doctorId}`, adminToken)
+    expect(adminAccounts.status).toBe(403)
+
+    const adminCategories = await api.get(`/api/cashbook/categories?userId=${doctorId}`, adminToken)
+    expect(adminCategories.status).toBe(403)
+
+    const adminBudgets = await api.get(`/api/cashbook/budgets/2026-09?userId=${doctorId}`, adminToken)
+    expect(adminBudgets.status).toBe(403)
+
+    const adminExport = await getBinary(`/api/cashbook/export?userId=${doctorId}&format=csv`, adminToken)
+    expect(adminExport.status).toBe(403)
 
     const otherDoctorEdit = await api.patch(`/api/cashbook/entries/${expenseEntryId}`, { description: 'Blocked' }, otherDoctorToken)
     expect(otherDoctorEdit.status).toBe(404)
 
     const adminEdit = await api.patch(`/api/cashbook/entries/${expenseEntryId}`, { description: 'Admin mutation' }, adminToken)
     expect(adminEdit.status).toBe(404)
+  })
+
+  it('shares a ledger only after the owner grants it, and revokes on request', async () => {
+    // Before any grant the manager sees nothing of the owner's ledger.
+    const beforeGrant = await api.get('/api/cashbook/access/ledgers', adminToken)
+    expect(beforeGrant.status).toBe(200)
+    const beforeIds = (beforeGrant.body.data as Array<{ ownerId: string }>).map((row) => row.ownerId)
+    expect(beforeIds).toContain(adminId)
+    expect(beforeIds).not.toContain(doctorId)
+
+    const grant = await api.post('/api/cashbook/access/grants', { granteeId: adminId }, doctorToken)
+    expect(grant.status).toBe(201)
+
+    const duplicate = await api.post('/api/cashbook/access/grants', { granteeId: adminId }, doctorToken)
+    expect(duplicate.status).toBe(409)
+
+    // The grant now authorises read access across every ledger surface.
+    const sharedEntries = await api.get(`/api/cashbook/entries?userId=${doctorId}`, adminToken)
+    expect(sharedEntries.status).toBe(200)
+    expect((sharedEntries.body.data as CashbookEntryData[]).length).toBeGreaterThan(0)
+
+    expect((await api.get(`/api/cashbook/summary?userId=${doctorId}`, adminToken)).status).toBe(200)
+    expect((await api.get(`/api/cashbook/accounts?userId=${doctorId}`, adminToken)).status).toBe(200)
+    expect((await api.get(`/api/cashbook/categories?userId=${doctorId}`, adminToken)).status).toBe(200)
+    expect((await api.get(`/api/cashbook/budgets/2026-09?userId=${doctorId}`, adminToken)).status).toBe(200)
+    expect((await api.get(`/api/cashbook/entries/${expenseEntryId}?userId=${doctorId}`, adminToken)).status).toBe(200)
+    expect((await getBinary(`/api/cashbook/export?userId=${doctorId}&format=csv`, adminToken)).status).toBe(200)
+
+    const afterGrant = await api.get('/api/cashbook/access/ledgers', adminToken)
+    const afterIds = (afterGrant.body.data as Array<{ ownerId: string }>).map((row) => row.ownerId)
+    expect(afterIds).toContain(doctorId)
+
+    // A grant confers read access only; the owner keeps exclusive write rights.
+    expect((await api.patch(`/api/cashbook/entries/${expenseEntryId}`, { description: 'Grantee write' }, adminToken)).status).toBe(404)
+
+    // Only the owner can see or withdraw the grant.
+    expect((await api.get('/api/cashbook/access/grants', adminToken)).body.data).toHaveLength(0)
+    const ownerGrants = await api.get('/api/cashbook/access/grants', doctorToken)
+    expect((ownerGrants.body.data as CashbookData[])).toHaveLength(1)
+    const grantId = (ownerGrants.body.data as Array<{ id: string; granteeId: string }>)[0]!.id
+    expect((await api.get(`/api/cashbook/access/grants?userId=${otherDoctorId}`, doctorToken)).status).toBe(200)
+
+    const grantToSelf = await api.post('/api/cashbook/access/grants', { granteeId: doctorId }, doctorToken)
+    expect(grantToSelf.status).toBe(400)
+
+    const otherDoctorRevoke = await api.delete(`/api/cashbook/access/grants/${grantId}`, otherDoctorToken)
+    expect(otherDoctorRevoke.status).toBe(404)
+
+    const revoke = await api.delete(`/api/cashbook/access/grants/${grantId}`, doctorToken)
+    expect(revoke.status).toBe(200)
+
+    // Revocation takes effect immediately.
+    expect((await api.get(`/api/cashbook/entries?userId=${doctorId}`, adminToken)).status).toBe(403)
+    const finalLedgers = await api.get('/api/cashbook/access/ledgers', adminToken)
+    expect((finalLedgers.body.data as Array<{ ownerId: string }>).map((row) => row.ownerId)).not.toContain(doctorId)
+  })
+
+  it('validates grant targets and excludes already-granted users from candidates', async () => {
+    const unknownUser = await api.post('/api/cashbook/access/grants', { granteeId: randomUUID() }, doctorToken)
+    expect(unknownUser.status).toBe(404)
+
+    const malformed = await api.post('/api/cashbook/access/grants', { granteeId: 'not-a-uuid' }, doctorToken)
+    expect(malformed.status).toBe(400)
+
+    // Patients hold no cashbook, so sharing with them is meaningless and rejected.
+    const grantToPatient = await api.post('/api/cashbook/access/grants', { granteeId: patientId }, doctorToken)
+    expect(grantToPatient.status).toBe(400)
+
+    const candidates = await api.get('/api/cashbook/access/candidates', doctorToken)
+    expect(candidates.status).toBe(200)
+    const candidateIds = (candidates.body.data as Array<{ id: string }>).map((row) => row.id)
+    expect(candidateIds).not.toContain(doctorId)
+    expect(candidateIds).not.toContain(patientId)
+    expect(candidateIds).toContain(otherDoctorId)
+
+    const grant = await api.post('/api/cashbook/access/grants', { granteeId: otherDoctorId }, doctorToken)
+    expect(grant.status).toBe(201)
+    const afterGrant = await api.get('/api/cashbook/access/candidates', doctorToken)
+    expect((afterGrant.body.data as Array<{ id: string }>).map((row) => row.id)).not.toContain(otherDoctorId)
+    await api.delete(`/api/cashbook/access/grants/${(grant.body.data as CashbookData).id}`, doctorToken)
   })
 
   it('manages archived resources and rejects empty updates and mismatched categories', async () => {
@@ -265,8 +374,24 @@ describe('Cashbook API', () => {
 
     const otherDoctorResponse = await getBinary(`/api/cashbook/receipts/${receiptId}`, otherDoctorToken)
     expect(otherDoctorResponse.status).toBe(403)
+
+    // A manager with no grant is refused the receipt file just like the listing.
     const adminResponse = await getBinary(`/api/cashbook/receipts/${receiptId}`, adminToken)
-    expect(adminResponse.status).toBe(200)
+    expect(adminResponse.status).toBe(403)
+
+    // Passing one's own id must not widen access to someone else's receipt.
+    const adminSelfClaim = await getBinary(`/api/cashbook/receipts/${receiptId}?userId=${adminId}`, adminToken)
+    expect(adminSelfClaim.status).toBe(403)
+
+    // Once the owner shares the ledger, the same receipt is readable.
+    const receiptGrant = await api.post('/api/cashbook/access/grants', { granteeId: adminId }, doctorToken)
+    expect(receiptGrant.status).toBe(201)
+    const grantedResponse = await getBinary(`/api/cashbook/receipts/${receiptId}?userId=${doctorId}`, adminToken)
+    expect(grantedResponse.status).toBe(200)
+    const grantList = await api.get('/api/cashbook/access/grants', doctorToken)
+    for (const grant of grantList.body.data as Array<{ id: string }>) {
+      await api.delete(`/api/cashbook/access/grants/${grant.id}`, doctorToken)
+    }
 
     invalidReceiptEntryId = await createEntry('expense', `Invalid receipt expense ${suffix}`, '50')
     const invalidUpload = await uploadReceipt(invalidReceiptEntryId, doctorToken, Buffer.from('not an image'), `invalid-${suffix}.png`)

@@ -10,4 +10,5 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
   const controller = new DashboardController(service, inventoryService)
 
   fastify.get('/', { preHandler: authenticate }, controller.index.bind(controller))
+  fastify.get('/stats', { preHandler: authenticate }, controller.stats.bind(controller))
 }

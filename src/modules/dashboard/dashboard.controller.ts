@@ -35,4 +35,15 @@ export class DashboardController {
 
     return reply.send({ success: true, data })
   }
+
+  async stats(request: FastifyRequest, reply: FastifyReply) {
+    const { role } = request.user
+
+    if (role === 'patient') {
+      return reply.status(403).send({ success: false, error: 'Access denied' })
+    }
+
+    const data = await this.service.getDashboardStats()
+    return reply.send({ success: true, data })
+  }
 }

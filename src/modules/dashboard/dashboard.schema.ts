@@ -56,6 +56,87 @@ export const DashboardResponseSchema = z.object({
   }).optional(),
 })
 
+export const DashboardStatsResponseSchema = z.object({
+  overview: z.object({
+    patientsTotal: z.number(),
+    patientsThisMonth: z.number(),
+    patientsThisWeek: z.number(),
+    patientsToday: z.number(),
+    visitsTotal: z.number(),
+    visitsThisMonth: z.number(),
+    visitsThisWeek: z.number(),
+    visitsToday: z.number(),
+    appointmentsTotal: z.number(),
+    appointmentsPending: z.number(),
+    appointmentsConfirmed: z.number(),
+    appointmentsCompleted: z.number(),
+    appointmentsToday: z.number(),
+  }),
+  clinical: z.object({
+    prescriptionsTotal: z.number(),
+    prescriptionsActive: z.number(),
+    prescriptionsThisMonth: z.number(),
+    labOrdersTotal: z.number(),
+    labOrdersPending: z.number(),
+    labOrdersCompleted: z.number(),
+    labResultsTotal: z.number(),
+    labResultsThisMonth: z.number(),
+    labResultsAbnormal: z.number(),
+    patientNotesTotal: z.number(),
+    patientNotesThisMonth: z.number(),
+    patientNotesThisWeek: z.number(),
+  }),
+  communication: z.object({
+    smsSent: z.number().nullable(),
+    messagesTotal: z.number(),
+    messagesUnread: z.number(),
+    messagesThisMonth: z.number(),
+  }),
+  financial: z.object({
+    revenueThisMonth: z.number(),
+    dailyReportsThisMonth: z.number(),
+    billingTotal: z.number(),
+    billingPaid: z.number(),
+    billingPending: z.number(),
+    billingPaidAmount: z.number(),
+    billingPendingAmount: z.number(),
+  }),
+  leads: z.object({
+    leadsTotal: z.number(),
+    leadsNew: z.number(),
+    leadsConverted: z.number(),
+    leadsLost: z.number(),
+    leadsThisMonth: z.number(),
+    conversionRate: z.number(),
+  }),
+  trends: z.object({
+    patientsByMonth: z.array(z.object({ month: z.string(), count: z.number() })),
+    visitsByMonth: z.array(z.object({ month: z.string(), count: z.number() })),
+    revenueByMonth: z.array(z.object({ month: z.string(), revenue: z.number() })),
+  }),
+  recent: z.object({
+    recentPatients: z.array(z.object({
+      id: z.string(),
+      firstName: z.string().nullable(),
+      lastName: z.string().nullable(),
+      phone: z.string().nullable(),
+      createdAt: z.date().nullable(),
+    })),
+    recentVisits: z.array(z.object({
+      id: z.string(),
+      patientName: z.string().nullable(),
+      visitDate: z.date().nullable(),
+      visitType: z.string().nullable(),
+    })),
+    recentNotes: z.array(z.object({
+      id: z.string(),
+      patientName: z.string().nullable(),
+      content: z.string().nullable(),
+      createdAt: z.date().nullable(),
+    })),
+  }),
+})
+
 export const PatientDashboardResponseSchema = z.object({
   patient: z.object({
     id: z.string(),
@@ -91,4 +172,5 @@ export const PatientDashboardResponseSchema = z.object({
 })
 
 export type DashboardResponse = z.infer<typeof DashboardResponseSchema>
+export type DashboardStatsResponse = z.infer<typeof DashboardStatsResponseSchema>
 export type PatientDashboardResponse = z.infer<typeof PatientDashboardResponseSchema>

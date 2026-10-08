@@ -1,8 +1,10 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { env } from '../../config/env'
 import { ValidationError } from '../../shared/errors'
+import { CashbookAccessService } from './cashbook-access.service'
 import {
   CashbookAccountSchema,
+  CashbookGrantSchema,
   CashbookBudgetSchema,
   CashbookCategorySchema,
   CashbookExportQuerySchema,
@@ -21,11 +23,11 @@ import {
 import { CashbookService } from './cashbook.service'
 
 export class CashbookController {
-  constructor(private service: CashbookService) {}
+  constructor(private service: CashbookService, private access: CashbookAccessService) {}
 
   async listEntries(request: FastifyRequest, reply: FastifyReply) {
     const query = CashbookListQuerySchema.parse(request.query)
-    const ownerId = this.service.resolveOwnerId(request.user.id, request.user.role, query.userId)
+    const ownerId = await this.service.resolveOwnerId(request.user.id, query.userId)
     const data = await this.service.listEntries(ownerId, { ...query, userId: undefined })
     return reply.send({ success: true, ...data })
   }
@@ -33,7 +35,7 @@ export class CashbookController {
   async getEntry(request: FastifyRequest, reply: FastifyReply) {
     const id = CashbookIdSchema.parse((request.params as { id: string }).id)
     const query = CashbookOwnerQuerySchema.parse(request.query)
-    const data = await this.service.getEntry(id, request.user.id, request.user.role, query.userId)
+    const data = await this.service.getEntry(id, request.user.id, query.userId)
     return reply.send({ success: true, data })
   }
 
@@ -59,14 +61,14 @@ export class CashbookController {
 
   async summary(request: FastifyRequest, reply: FastifyReply) {
     const query = CashbookSummaryQuerySchema.parse(request.query)
-    const ownerId = this.service.resolveOwnerId(request.user.id, request.user.role, query.userId)
+    const ownerId = await this.service.resolveOwnerId(request.user.id, query.userId)
     const data = await this.service.getSummary(ownerId, query)
     return reply.send({ success: true, data })
   }
 
   async listCategories(request: FastifyRequest, reply: FastifyReply) {
     const query = CashbookResourceQuerySchema.parse(request.query)
-    const ownerId = this.service.resolveOwnerId(request.user.id, request.user.role, query.userId)
+    const ownerId = await this.service.resolveOwnerId(request.user.id, query.userId)
     const data = await this.service.listCategories(ownerId, query.includeArchived)
     return reply.send({ success: true, data })
   }
@@ -86,7 +88,7 @@ export class CashbookController {
 
   async listAccounts(request: FastifyRequest, reply: FastifyReply) {
     const query = CashbookResourceQuerySchema.parse(request.query)
-    const ownerId = this.service.resolveOwnerId(request.user.id, request.user.role, query.userId)
+    const ownerId = await this.service.resolveOwnerId(request.user.id, query.userId)
     const data = await this.service.listAccounts(ownerId, query.includeArchived)
     return reply.send({ success: true, data })
   }
@@ -107,7 +109,7 @@ export class CashbookController {
   async getBudgets(request: FastifyRequest, reply: FastifyReply) {
     const month = CashbookMonthSchema.parse((request.params as { month: string }).month)
     const query = CashbookOwnerQuerySchema.parse(request.query)
-    const ownerId = this.service.resolveOwnerId(request.user.id, request.user.role, query.userId)
+    const ownerId = await this.service.resolveOwnerId(request.user.id, query.userId)
     const data = await this.service.getBudgets(ownerId, month)
     return reply.send({ success: true, data })
   }
@@ -126,7 +128,7 @@ export class CashbookController {
 
   async exportEntries(request: FastifyRequest, reply: FastifyReply) {
     const query = CashbookExportQuerySchema.parse(request.query)
-    const ownerId = this.service.resolveOwnerId(request.user.id, request.user.role, query.userId)
+    const ownerId = await this.service.resolveOwnerId(request.user.id, query.userId)
     const buffer = await this.service.exportEntries(ownerId, query)
     const filename = `cashbook-${query.month || 'period'}-${new Date().toISOString().slice(0, 10)}.${query.format}`
     reply.header('Content-Type', query.format === 'csv'
@@ -143,7 +145,7 @@ export class CashbookController {
     if (!part) throw new ValidationError('No receipt file uploaded')
     try {
       const buffer = await part.toBuffer()
-      const data = await this.service.uploadReceipt(id, request.user.id, request.user.role, buffer, part.filename || 'receipt')
+      const data = await this.service.uploadReceipt(id, request.user.id, buffer, part.filename || 'receipt')
       return reply.status(201).send({ success: true, data, message: 'Receipt uploaded successfully' })
     } finally {
       part.file.destroy()
@@ -152,8 +154,7 @@ export class CashbookController {
 
   async serveReceipt(request: FastifyRequest, reply: FastifyReply) {
     const id = CashbookIdSchema.parse((request.params as { id: string }).id)
-    const query = CashbookOwnerQuerySchema.parse(request.query)
-    const result = await this.service.getReceipt(id, request.user.id, request.user.role, query.userId)
+    const result = await this.service.getReceipt(id, request.user.id)
     const filename = result.receipt.originalName.replace(/[\r\n"]/g, '') || 'receipt'
     reply.header('Content-Type', result.receipt.mimeType)
     reply.header('Content-Disposition', `inline; filename="${filename}"`)
@@ -164,5 +165,43 @@ export class CashbookController {
       reply.header('Content-Security-Policy', "default-src 'none'; sandbox")
     }
     return reply.send(result.file.stream)
+  }
+
+  /** Ledgers the caller may read: their own plus those explicitly shared with them. */
+  async listVisibleLedgers(request: FastifyRequest, reply: FastifyReply) {
+    const data = await this.access.listVisibleLedgers(request.user.id)
+    return reply.send({ success: true, data })
+  }
+
+  /** Grants the caller has handed out on their own ledger. */
+  async listGrants(request: FastifyRequest, reply: FastifyReply) {
+    const data = await this.access.listGrants(request.user.id)
+    return reply.send({ success: true, data })
+  }
+
+  /** Approved staff the caller may still share their ledger with. */
+  async listGrantableUsers(request: FastifyRequest, reply: FastifyReply) {
+    const data = await this.access.listGrantableUsers(request.user.id)
+    return reply.send({ success: true, data })
+  }
+
+  /** Share the caller's own ledger with another user. */
+  async createGrant(request: FastifyRequest, reply: FastifyReply) {
+    const dto = CashbookGrantSchema.parse(request.body)
+    const data = await this.access.createGrant(request.user.id, dto, {
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent'],
+    })
+    return reply.status(201).send({ success: true, data, message: 'Ledger access granted' })
+  }
+
+  /** Withdraw a grant previously issued on the caller's own ledger. */
+  async revokeGrant(request: FastifyRequest, reply: FastifyReply) {
+    const id = CashbookIdSchema.parse((request.params as { id: string }).id)
+    const data = await this.access.revokeGrant(request.user.id, id, {
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent'],
+    })
+    return reply.send({ success: true, data, message: 'Ledger access revoked' })
   }
 }

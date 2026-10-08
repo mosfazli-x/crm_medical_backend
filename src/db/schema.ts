@@ -342,6 +342,18 @@ export const cashbookBudgets = pgTable('cashbook_budgets', {
     amountCheck: check('chk_cashbook_budgets_amount', sql`${table.amountRial} > 0`),
 }));
 
+export const cashbookAccessGrants = pgTable('cashbook_access_grants', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: uuid('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    granteeId: uuid('grantee_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    ownerIdx: index('idx_cashbook_access_owner').on(table.ownerId),
+    granteeIdx: index('idx_cashbook_access_grantee').on(table.granteeId),
+    pairUnique: uniqueIndex('uq_cashbook_access_owner_grantee').on(table.ownerId, table.granteeId),
+    notSelfCheck: check('chk_cashbook_access_not_self', sql`${table.ownerId} <> ${table.granteeId}`),
+}));
+
 export const otpCodes = pgTable('otp_codes', {
     id: uuid('id').primaryKey().defaultRandom(),
     phone: varchar('phone', { length: 20 }).notNull(),

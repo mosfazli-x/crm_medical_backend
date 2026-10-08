@@ -130,6 +130,12 @@ export const CashbookExportQuerySchema = CashbookSummaryFieldsSchema.extend({
 
 export const CashbookIdSchema = z.string().uuid()
 
+export const CashbookGrantSchema = z.object({
+  granteeId: z.string().uuid(),
+})
+
+export type CashbookGrantDto = z.infer<typeof CashbookGrantSchema>
+
 export const CashbookMonthSchema = MonthStringSchema
 
 export type CashbookKind = z.infer<typeof CashbookKindSchema>

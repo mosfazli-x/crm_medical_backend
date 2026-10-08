@@ -20,6 +20,8 @@ import {
   type SQL,
 } from 'drizzle-orm'
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors'
+import { isUniqueViolation } from '../../shared/utils'
+import { CashbookAccessService } from './cashbook-access.service'
 import { cashbookReceiptStorage } from './cashbook-receipt.service'
 import type {
   CashbookAccountDto,
@@ -106,12 +108,6 @@ function resolveRange(query: { from?: string; to?: string; month?: string }): Da
   }
 
   return range
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-  const candidate = error as { code?: string; cause?: { code?: string } }
-  return candidate.code === '23505' || candidate.cause?.code === '23505'
 }
 
 function mapCategory(row: {
@@ -201,14 +197,14 @@ function mapEntry(row: EntryRow) {
 }
 
 export class CashbookService {
-  constructor(private db: DB) {}
+  constructor(private db: DB, private access: CashbookAccessService = new CashbookAccessService(db)) {}
 
-  resolveOwnerId(actorId: string, actorRole: string, requestedOwnerId?: string): string {
-    if (!requestedOwnerId || requestedOwnerId === actorId) return actorId
-    if (actorRole !== 'admin_doctor') {
-      throw new ForbiddenError('You can only access your own cashbook')
-    }
-    return requestedOwnerId
+  /**
+   * Delegates owner resolution to the access service. Kept as a thin wrapper so the
+   * many call sites in this service stay unchanged apart from awaiting the result.
+   */
+  async resolveOwnerId(actorId: string, requestedOwnerId?: string): Promise<string> {
+    return this.access.resolveOwnerId(actorId, requestedOwnerId)
   }
 
   private entrySelect() {
@@ -239,8 +235,8 @@ export class CashbookService {
     }
   }
 
-  async getEntry(id: string, actorId: string, actorRole: string, requestedOwnerId?: string) {
-    const ownerId = this.resolveOwnerId(actorId, actorRole, requestedOwnerId)
+  /** Entry lookup for an already-authorised owner. Callers must resolve access first. */
+  private async loadEntry(id: string, ownerId: string) {
     const [row] = await this.db
       .select(this.entrySelect())
       .from(cashbookEntries)
@@ -252,6 +248,11 @@ export class CashbookService {
 
     if (!row) throw new NotFoundError('Cashbook entry')
     return mapEntry(row as EntryRow)
+  }
+
+  async getEntry(id: string, actorId: string, requestedOwnerId?: string) {
+    const ownerId = await this.resolveOwnerId(actorId, requestedOwnerId)
+    return this.loadEntry(id, ownerId)
   }
 
   async listEntries(ownerId: string, query: CashbookListQuery) {
@@ -356,7 +357,7 @@ export class CashbookService {
         })
         .returning({ id: cashbookEntries.id })
 
-      return this.getEntry(entry!.id, ownerId, 'admin_doctor')
+      return this.loadEntry(entry!.id, ownerId)
     } catch (error) {
       if (isUniqueViolation(error)) throw new ConflictError('Cashbook entry could not be created')
       throw error
@@ -364,7 +365,7 @@ export class CashbookService {
   }
 
   async updateEntry(id: string, ownerId: string, dto: UpdateCashbookEntryDto) {
-    const current = await this.getEntry(id, ownerId, 'admin_doctor')
+    const current = await this.loadEntry(id, ownerId)
     if (current.status === 'voided') throw new ValidationError('Voided entries cannot be edited')
     if (Object.keys(dto).length === 0) throw new ValidationError('No fields to update')
 
@@ -397,11 +398,11 @@ export class CashbookService {
       ))
       .returning({ id: cashbookEntries.id })
     if (!updated) {
-      const latest = await this.getEntry(id, ownerId, 'admin_doctor')
+      const latest = await this.loadEntry(id, ownerId)
       if (latest.status === 'voided') throw new ValidationError('Voided entries cannot be edited')
       throw new NotFoundError('Cashbook entry')
     }
-    return this.getEntry(id, ownerId, 'admin_doctor')
+    return this.loadEntry(id, ownerId)
   }
 
   async voidEntry(id: string, ownerId: string, reason: string) {
@@ -411,7 +412,7 @@ export class CashbookService {
       .where(and(eq(cashbookEntries.id, id), eq(cashbookEntries.userId, ownerId)))
       .limit(1)
     if (!entry) throw new NotFoundError('Cashbook entry')
-    if (entry.status === 'voided') return this.getEntry(id, ownerId, 'admin_doctor')
+    if (entry.status === 'voided') return this.loadEntry(id, ownerId)
 
     const [updated] = await this.db
       .update(cashbookEntries)
@@ -422,8 +423,8 @@ export class CashbookService {
         eq(cashbookEntries.status, 'active'),
       ))
       .returning({ id: cashbookEntries.id })
-    if (!updated) return this.getEntry(id, ownerId, 'admin_doctor')
-    return this.getEntry(id, ownerId, 'admin_doctor')
+    if (!updated) return this.loadEntry(id, ownerId)
+    return this.loadEntry(id, ownerId)
   }
 
   async listCategories(ownerId: string, includeArchived = false) {
@@ -727,7 +728,7 @@ export class CashbookService {
     }
   }
 
-  async uploadReceipt(entryId: string, actorId: string, actorRole: string, buffer: Buffer, originalName: string) {
+  async uploadReceipt(entryId: string, actorId: string, buffer: Buffer, originalName: string) {
     const [entry] = await this.db
       .select({ userId: cashbookEntries.userId, status: cashbookEntries.status })
       .from(cashbookEntries)
@@ -785,17 +786,17 @@ export class CashbookService {
     }
   }
 
-  async getReceipt(receiptId: string, actorId: string, actorRole: string, requestedOwnerId?: string) {
+  async getReceipt(receiptId: string, actorId: string, requestedOwnerId?: string) {
     const [receipt] = await this.db
       .select()
       .from(cashbookReceipts)
       .where(eq(cashbookReceipts.id, receiptId))
       .limit(1)
     if (!receipt) throw new NotFoundError('Cashbook receipt')
-    this.resolveOwnerId(actorId, actorRole, requestedOwnerId || receipt.userId)
-    if (actorRole !== 'admin_doctor' && receipt.userId !== actorId) {
-      throw new ForbiddenError('You can only access your own receipt')
-    }
+    // The receipt's own owner is authoritative; a supplied userId may only narrow the
+    // claim, never widen it, otherwise a caller could pass their own id to slip past
+    // the grant check for someone else's receipt.
+    await this.resolveOwnerId(actorId, receipt.userId)
     const file = await cashbookReceiptStorage.open(receipt.storageKey)
     if (!file) throw new NotFoundError('Cashbook receipt file')
     return { receipt, file }
