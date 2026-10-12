@@ -235,6 +235,7 @@ export const users = pgTable('users', {
     requiresPasswordChange: boolean('requires_password_change').default(true),
     smsEnabled: boolean('sms_enabled').default(true).notNull(),
     telegramEnabled: boolean('telegram_enabled').default(true).notNull(),
+    showActiveBookings: boolean('show_active_bookings').default(true).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => {

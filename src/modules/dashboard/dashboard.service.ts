@@ -139,6 +139,7 @@ export class DashboardService {
           eq(appointments.patientId, patientId),
           sql`${appointments.appointmentDate} >= CURRENT_DATE`,
           sql`${appointments.status} IN ('pending', 'confirmed')`,
+          sql`(${users.showActiveBookings} IS NULL OR ${users.showActiveBookings} = true)`,
         ),
       )
       .orderBy(appointments.appointmentDate, appointments.startTime)

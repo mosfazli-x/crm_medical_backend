@@ -518,6 +518,20 @@ export class StaffService {
     return updated
   }
 
+  async deleteAttendance(recordId: string) {
+    const [existing] = await this.db
+      .select({ id: staffAttendance.id })
+      .from(staffAttendance)
+      .where(eq(staffAttendance.id, recordId))
+
+    if (!existing) throw new NotFoundError('رکورد حضور و غیاب یافت نشد')
+
+    // Sessions are removed by the FK cascade.
+    await this.db.delete(staffAttendance).where(eq(staffAttendance.id, recordId))
+
+    return { success: true }
+  }
+
   async bulkUpdateAttendance(dto: BulkAttendanceDto) {
     const results = await this.db.transaction(async (tx) => {
       const inserted = []

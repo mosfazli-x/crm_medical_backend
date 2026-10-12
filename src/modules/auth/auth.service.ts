@@ -30,6 +30,7 @@ export class AuthService {
         requiresPasswordChange: users.requiresPasswordChange,
         status: users.status,
         phoneConfirmed: users.phoneConfirmed,
+        showActiveBookings: users.showActiveBookings,
       })
       .from(users)
       .where(eq(users.phone, dto.phone))
@@ -58,6 +59,7 @@ export class AuthService {
       role: user.role,
       patientId: user.patientId,
       requiresPasswordChange: user.requiresPasswordChange,
+      showActiveBookings: user.showActiveBookings,
     }
   }
 
@@ -135,6 +137,7 @@ export class AuthService {
         requiresPasswordChange: users.requiresPasswordChange,
         smsEnabled: users.smsEnabled,
         telegramEnabled: users.telegramEnabled,
+        showActiveBookings: users.showActiveBookings,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
       })
@@ -154,26 +157,34 @@ export class AuthService {
       updatedAt: new Date(),
     }
 
+    const [existingUser] = await this.db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+
+    if (!existingUser) {
+      throw new NotFoundError('User not found')
+    }
+
     if (dto.fullName !== undefined) {
       updateData.fullName = dto.fullName
     }
 
     if (dto.organizationName !== undefined) {
-      const [user] = await this.db
-        .select({ role: users.role })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1)
-
-      if (!user) {
-        throw new NotFoundError('User not found')
-      }
-
-      if (!['lab', 'pharmacy'].includes(user.role)) {
+      if (!['lab', 'pharmacy'].includes(existingUser.role)) {
         throw new ValidationError('Organization name can only be set for lab or pharmacy roles')
       }
 
       updateData.organizationName = dto.organizationName
+    }
+
+    if (dto.showActiveBookings !== undefined) {
+      if (existingUser.role !== 'admin_doctor') {
+        throw new ValidationError('Active appointment booking visibility can only be managed by the clinic manager')
+      }
+
+      updateData.showActiveBookings = dto.showActiveBookings
     }
 
     if (Object.keys(updateData).length === 1) {
@@ -195,6 +206,7 @@ export class AuthService {
         requiresPasswordChange: users.requiresPasswordChange,
         smsEnabled: users.smsEnabled,
         telegramEnabled: users.telegramEnabled,
+        showActiveBookings: users.showActiveBookings,
         updatedAt: users.updatedAt,
       })
 

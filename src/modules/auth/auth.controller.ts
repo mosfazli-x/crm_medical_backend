@@ -54,6 +54,7 @@ export class AuthController {
         role: user.role,
         patientId: user.patientId,
         requiresPasswordChange: user.requiresPasswordChange,
+        showActiveBookings: user.showActiveBookings,
       },
     })
   }

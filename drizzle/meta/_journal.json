@@ -162,6 +162,13 @@
       "when": 1791231404319,
       "tag": "0022_square_clea",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791231500000,
+      "tag": "0023_show_active_bookings",
+      "breakpoints": true
     }
   ]
 }

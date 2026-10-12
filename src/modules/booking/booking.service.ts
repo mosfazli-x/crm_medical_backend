@@ -28,6 +28,7 @@ export class BookingService {
       eq(doctorVisitTypes.isActive, true),
       eq(doctorVisitTypes.isDeleted, false),
       eq(users.status, 'approved'),
+      eq(users.showActiveBookings, true),
       sql`${users.role} IN ('doctor', 'admin_doctor')`,
     ]
 
@@ -92,6 +93,14 @@ export class BookingService {
   }
 
   async getAvailableSlots(doctorId: string, dateStr: string) {
+    const [doctor] = await this.db
+      .select({ showActiveBookings: users.showActiveBookings })
+      .from(users)
+      .where(eq(users.id, doctorId))
+      .limit(1)
+
+    if (doctor && doctor.showActiveBookings === false) return []
+
     const date = new Date(dateStr + 'T00:00:00')
     const dayOfWeek = date.getDay()
 

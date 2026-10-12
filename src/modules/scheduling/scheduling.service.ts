@@ -29,7 +29,8 @@ export class SchedulingService {
       .from(users)
       .where(and(
         sql`${users.role} IN ('doctor', 'admin_doctor')`,
-        eq(users.status, 'approved')
+        eq(users.status, 'approved'),
+        eq(users.showActiveBookings, true)
       ))
       .orderBy(users.fullName)
   }
@@ -88,6 +89,16 @@ export class SchedulingService {
 
     if (date) {
       conditions.push(eq(appointments.appointmentDate, date))
+    }
+
+    const [doctor] = await this.db
+      .select({ showActiveBookings: users.showActiveBookings })
+      .from(users)
+      .where(eq(users.id, doctorId))
+      .limit(1)
+
+    if (doctor && doctor.showActiveBookings === false) {
+      conditions.push(sql`${appointments.status} NOT IN ('pending', 'confirmed')`)
     }
 
     return this.db
@@ -190,6 +201,14 @@ export class SchedulingService {
   }
 
   async getAvailableSlots(doctorId: string, dateStr: string) {
+    const [doctor] = await this.db
+      .select({ showActiveBookings: users.showActiveBookings })
+      .from(users)
+      .where(eq(users.id, doctorId))
+      .limit(1)
+
+    if (doctor && doctor.showActiveBookings === false) return []
+
     const date = new Date(dateStr + 'T00:00:00')
     const dayOfWeek = date.getDay()
 
@@ -330,6 +349,16 @@ export class SchedulingService {
 
     if (date) {
       conditions.push(eq(appointments.appointmentDate, date))
+    }
+
+    const [doctor] = await this.db
+      .select({ showActiveBookings: users.showActiveBookings })
+      .from(users)
+      .where(eq(users.id, doctorId))
+      .limit(1)
+
+    if (doctor && doctor.showActiveBookings === false) {
+      conditions.push(sql`${appointments.status} NOT IN ('pending', 'confirmed')`)
     }
 
     return this.db

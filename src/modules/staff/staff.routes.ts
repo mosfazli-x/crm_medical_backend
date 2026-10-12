@@ -3,6 +3,10 @@ import { StaffController } from './staff.controller'
 import { StaffService } from './staff.service'
 import { requireRole, authenticate } from '../../shared/middleware'
 
+// Everyone on the clinic team logs their own attendance; only patients are
+// excluded. Keep this in sync with the app-shell attendance visibility.
+const SELF_ATTENDANCE_ROLES = ['admin_doctor', 'doctor', 'lab', 'pharmacy', 'clinic_staff'] as const
+
 export async function staffRoutes(fastify: FastifyInstance) {
   const service = new StaffService(fastify.db)
   const controller = new StaffController(service)
@@ -16,14 +20,15 @@ export async function staffRoutes(fastify: FastifyInstance) {
   fastify.post<{ Params: { id: string } }>('/:id/activate', { preHandler: requireRole('admin_doctor') }, (req, rep) => controller.activateStaff(req, rep))
   fastify.delete<{ Params: { id: string } }>('/:id', { preHandler: requireRole('admin_doctor') }, (req, rep) => controller.deleteStaff(req, rep))
 
-  // Attendance - self check-in/check-out (clinic_staff)
-  fastify.post('/attendance/check-in', { preHandler: requireRole('clinic_staff') }, (req, rep) => controller.checkIn(req, rep))
-  fastify.post('/attendance/check-out', { preHandler: requireRole('clinic_staff') }, (req, rep) => controller.checkOut(req, rep))
-  fastify.get('/attendance/me', { preHandler: requireRole('clinic_staff') }, (req, rep) => controller.getMyAttendance(req, rep))
+  // Attendance - self check-in/check-out (any clinic member except patients)
+  fastify.post('/attendance/check-in', { preHandler: requireRole(...SELF_ATTENDANCE_ROLES) }, (req, rep) => controller.checkIn(req, rep))
+  fastify.post('/attendance/check-out', { preHandler: requireRole(...SELF_ATTENDANCE_ROLES) }, (req, rep) => controller.checkOut(req, rep))
+  fastify.get('/attendance/me', { preHandler: requireRole(...SELF_ATTENDANCE_ROLES) }, (req, rep) => controller.getMyAttendance(req, rep))
 
   // Attendance - admin
   fastify.get('/attendance/report', { preHandler: requireRole('admin_doctor') }, (req, rep) => controller.getAttendanceReport(req, rep))
   fastify.put<{ Params: { id: string } }>('/attendance/:id', { preHandler: requireRole('admin_doctor') }, (req, rep) => controller.updateAttendance(req, rep))
+  fastify.delete<{ Params: { id: string } }>('/attendance/:id', { preHandler: requireRole('admin_doctor') }, (req, rep) => controller.deleteAttendance(req, rep))
   fastify.post('/attendance/bulk', { preHandler: requireRole('admin_doctor') }, (req, rep) => controller.bulkUpdateAttendance(req, rep))
 
   // Schedules

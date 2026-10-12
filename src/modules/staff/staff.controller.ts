@@ -119,6 +119,15 @@ export class StaffController {
     })
   }
 
+  async deleteAttendance(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+    const { id } = request.params
+    await this.staffService.deleteAttendance(id)
+    return reply.status(200).send({
+      success: true,
+      message: 'رکورد حضور و غیاب حذف شد',
+    })
+  }
+
   async bulkUpdateAttendance(request: FastifyRequest, reply: FastifyReply) {
     const dto = BulkAttendanceSchema.parse(request.body)
     const data = await this.staffService.bulkUpdateAttendance(dto)

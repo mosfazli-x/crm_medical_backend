@@ -38,6 +38,7 @@ export const ResetPasswordSchema = z.object({
 export const UpdateProfileSchema = z.object({
   fullName: z.string().min(2, 'نام کامل باید حداقل ۲ کاراکتر باشد').optional(),
   organizationName: z.string().min(1, 'نام سازمان الزامی است').optional(),
+  showActiveBookings: z.boolean().optional(),
 })
 
 export const ChangePasswordSchema = z.object({
@@ -74,6 +75,7 @@ export interface UserProfileResponse {
   requiresPasswordChange: boolean
   smsEnabled: boolean
   telegramEnabled: boolean
+  showActiveBookings: boolean
   createdAt: Date
   updatedAt: Date
 }
