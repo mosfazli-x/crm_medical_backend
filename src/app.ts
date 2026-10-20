@@ -36,7 +36,7 @@ export async function buildApp() {
   })
 
   const corsOrigins = env.NODE_ENV === 'production'
-    ? [env.CORS_ORIGIN || 'https://yourdomain.com']
+    ? [env.CORS_ORIGIN || 'https://api.hastihoseini.ir']
     : true
 
   await app.register(cors, {
@@ -54,7 +54,7 @@ export async function buildApp() {
       fieldNameSize: 100,
       fieldSize: 1_000_000,
       fileSize: env.MAX_FILE_SIZE,
-      files: 50,
+      files: 100,
     },
     attachFieldsToBody: false,
   })

@@ -34,7 +34,7 @@ const envSchema = z.object({
     (val) => val === 'true' || val === '1' || val === true || val === 1,
     z.boolean()
   ).default(false),
-  MAX_FILE_SIZE: z.coerce.number().int().positive().default(10 * 1024 * 1024),
+  MAX_FILE_SIZE: z.coerce.number().int().positive().default(100 * 1024 * 1024),
   ALLOWED_MIME_TYPES: z.string().default('image/jpeg,image/png,image/webp,application/pdf,image/svg+xml'),
 
   S3_ENDPOINT: z.string().optional(),
