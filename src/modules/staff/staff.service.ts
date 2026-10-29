@@ -12,7 +12,7 @@ import type {
   BulkAttendanceDto,
   SetStaffScheduleDto,
 } from './staff.schema'
-import { getTodayJalali, jalaliToGregorianDate } from '../../shared/utils/date'
+import { jalaliToGregorianDate, toJalaliDateStr } from '../../shared/utils/date'
 import { toJalaali, jalaaliMonthLength } from 'jalaali-js'
 import bcrypt from 'bcrypt'
 
@@ -200,8 +200,31 @@ export class StaffService {
     return { success: true }
   }
 
+  /**
+   * A day sent by the device is trusted, but only when it stays near the
+   * server's own day — a wrong clock must not open records years away.
+   */
+  private assertPunchDay(day: string) {
+    let target: number
+    try {
+      target = jalaliToGregorianDate(day).getTime()
+    } catch {
+      throw new ValidationError('تاریخ ثبت حضور و غیاب معتبر نیست')
+    }
+    const server = jalaliToGregorianDate(toJalaliDateStr(new Date())).getTime()
+    if (!Number.isFinite(target) || Math.abs(target - server) / 86_400_000 > 400) {
+      throw new ValidationError('تاریخ ثبت حضور و غیاب معتبر نیست')
+    }
+  }
+
   async checkIn(staffId: string, dto: CheckInDto) {
-    const today = getTodayJalali()
+    // A punch replayed from an offline queue carries the moment it happened;
+    // the attendance day follows that moment, not the replay time.
+    const at = dto.at ? new Date(dto.at) : new Date()
+    // The device decides which day the punch belongs to — the server clock and
+    // the clinic are not necessarily in the same timezone.
+    if (dto.date) this.assertPunchDay(dto.date)
+    const today = dto.date ?? toJalaliDateStr(at)
 
     let [record] = await this.db
       .select()
@@ -228,7 +251,7 @@ export class StaffService {
       .insert(staffAttendanceSessions)
       .values({
         attendanceId: record.id,
-        checkInTime: new Date(),
+        checkInTime: at,
       })
       .returning()
 
@@ -242,15 +265,31 @@ export class StaffService {
   }
 
   async checkOut(staffId: string, dto: CheckOutDto) {
-    const today = getTodayJalali()
+    // The session that has to be closed belongs to the day the punch happened.
+    const at = dto.at ? new Date(dto.at) : new Date()
+    const serverDay = toJalaliDateStr(at)
+    if (dto.date) this.assertPunchDay(dto.date)
+    const today = dto.date ?? serverDay
 
-    const [attendance] = await this.db
+    let [attendance] = await this.db
       .select()
       .from(staffAttendance)
       .where(and(
         eq(staffAttendance.staffId, staffId),
         eq(staffAttendance.date, today),
       ))
+
+    // The device and the server disagreed about the day — fall back to the
+    // server's day so the punch still closes the session it belongs to.
+    if (!attendance && today !== serverDay) {
+      ;[attendance] = await this.db
+        .select()
+        .from(staffAttendance)
+        .where(and(
+          eq(staffAttendance.staffId, staffId),
+          eq(staffAttendance.date, serverDay),
+        ))
+    }
 
     if (!attendance) {
       throw new ValidationError('شما امروز هنوز ورود ثبت نکرده‌اید')
@@ -273,7 +312,7 @@ export class StaffService {
     await this.db
       .update(staffAttendanceSessions)
       .set({
-        checkOutTime: new Date(),
+        checkOutTime: at,
         updatedAt: new Date(),
       })
       .where(eq(staffAttendanceSessions.id, openSession.id))

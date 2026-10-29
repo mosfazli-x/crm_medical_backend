@@ -18,8 +18,12 @@ export function dateToJalaliStr(date: Date): string {
 }
 
 export function getTodayJalali(): string {
-  const now = new Date()
-  const j = toJalaali(now.getFullYear(), now.getMonth() + 1, now.getDate())
+  return toJalaliDateStr(new Date())
+}
+
+/** Jalali calendar day (`YYYY-MM-DD`) a timestamp belongs to. */
+export function toJalaliDateStr(date: Date): string {
+  const j = toJalaali(date.getFullYear(), date.getMonth() + 1, date.getDate())
   return `${j.jy}-${String(j.jm).padStart(2, '0')}-${String(j.jd).padStart(2, '0')}`
 }
 

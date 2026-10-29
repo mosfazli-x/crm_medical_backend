@@ -27,12 +27,33 @@ export type UpdateStaffProfileDto = z.infer<typeof UpdateStaffProfileSchema>
 export const CheckInSchema = z.object({
   workLocation: z.enum(['clinic', 'remote', 'field']).default('clinic'),
   notes: z.string().nullable().optional(),
+  /**
+   * ISO timestamp of the moment the punch happened.
+   *
+   * Clients that work offline queue their punches and replay them later, so the
+   * original time has to travel with the request instead of being taken from
+   * the server clock at replay time.
+   */
+  at: z.iso.datetime().optional(),
+  /**
+   * The Jalali day (`YYYY-MM-DD`) the punch belongs to, as the device sees it.
+   *
+   * The server clock and the clinic are not necessarily in the same timezone,
+   * so the day a punch belongs to is decided by the device that recorded it.
+   * Without it a punch made late at night would land on the next day and the
+   * app would keep asking for a check-in that already happened.
+   */
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
 export type CheckInDto = z.infer<typeof CheckInSchema>
 
 export const CheckOutSchema = z.object({
   notes: z.string().nullable().optional(),
+  /** ISO timestamp of the moment the punch happened — see `CheckInSchema.at`. */
+  at: z.iso.datetime().optional(),
+  /** Jalali day the punch belongs to — see `CheckInSchema.date`. */
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
 export type CheckOutDto = z.infer<typeof CheckOutSchema>
