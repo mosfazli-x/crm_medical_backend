@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import type { FastifyError } from 'fastify'
 import { ZodError } from 'zod'
-import { AppError, ValidationError } from '../errors'
+import { AppError, ValidationError, ConflictError } from '../errors'
 
 export function errorHandler(
   error: FastifyError | AppError | Error,
@@ -9,13 +9,17 @@ export function errorHandler(
   reply: FastifyReply
 ) {
   if (error instanceof AppError) {
-    reply.status(error.statusCode).send({
+    const body: Record<string, unknown> = {
       success: false,
       error: error.message,
-      ...(error instanceof ValidationError && error.details
-        ? { details: error.details }
-        : {}),
-    })
+    }
+    if (error instanceof ValidationError && error.details) {
+      body.details = error.details
+    }
+    if (error instanceof ConflictError && error.data !== undefined) {
+      body.data = error.data
+    }
+    reply.status(error.statusCode).send(body)
     return
   }
 

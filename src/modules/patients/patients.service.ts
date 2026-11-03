@@ -180,18 +180,51 @@ export class PatientService {
       return insertedPatient
     })
 
-    return newPatient
+      return newPatient
     } catch (error: any) {
       const pgCode = error?.code || error?.cause?.code
       const pgConstraint = error?.constraint || error?.cause?.constraint || ''
       if (pgCode === '23505') {
-        if (pgConstraint.includes('national_id') || String(error?.message || '').includes('national_id')) {
-          throw new ConflictError('این کد ملی قبلاً ثبت شده است')
+        let message = ''
+        let existingPatientId: string | null = null
+
+        const isNationalIdConflict =
+          pgConstraint.includes('national_id') || String(error?.message || '').includes('national_id')
+        const isPhoneConflict =
+          pgConstraint.includes('phone') || String(error?.message || '').includes('users_phone_key')
+
+        if (isNationalIdConflict && dto.patient.national_id) {
+          message = 'این کد ملی قبلاً ثبت شده است'
+          const existing = await this.db
+            .select({ id: patients.id })
+            .from(patients)
+            .where(eq(patients.nationalId, dto.patient.national_id))
+            .limit(1)
+          existingPatientId = existing[0]?.id ?? null
+        } else if (isPhoneConflict && dto.patient.phone) {
+          message = 'این شماره تلفن قبلاً ثبت شده است'
+          const existing = await this.db
+            .select({ id: patients.id })
+            .from(patients)
+            .where(eq(patients.phone, dto.patient.phone))
+            .limit(1)
+          existingPatientId = existing[0]?.id ?? null
+        } else {
+          message = 'اطلاعات تکراری است'
+          const existing = await this.db
+            .select({ id: patients.id })
+            .from(patients)
+            .where(
+              or(
+                eq(patients.nationalId, dto.patient.national_id || ''),
+                eq(patients.phone, dto.patient.phone || '')
+              )
+            )
+            .limit(1)
+          existingPatientId = existing[0]?.id ?? null
         }
-        if (pgConstraint.includes('phone') || String(error?.message || '').includes('users_phone_key')) {
-          throw new ConflictError('این شماره تلفن قبلاً ثبت شده است')
-        }
-        throw new ConflictError('اطلاعات تکراری است')
+
+        throw new ConflictError(message, { patientId: existingPatientId })
       }
       throw error
     }

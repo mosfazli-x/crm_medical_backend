@@ -18,8 +18,11 @@ export class NotFoundError extends AppError {
 }
 
 export class ConflictError extends AppError {
-  constructor(message = 'Resource already exists') {
+  public readonly data?: unknown
+
+  constructor(message = 'Resource already exists', data?: unknown) {
     super(message, 409)
+    this.data = data
   }
 }
 
