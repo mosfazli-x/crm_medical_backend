@@ -1,6 +1,6 @@
 import type { DB } from '../../db/client'
-import { dailyReportVisitTypes, dailyReports, patients } from '../../db/schema'
-import { eq, and, desc, sql, type SQL } from 'drizzle-orm'
+import { dailyReportVisitTypes, dailyReports, dailyReportSheetRows, patients } from '../../db/schema'
+import { eq, and, desc, sql, getTableColumns, type SQL } from 'drizzle-orm'
 import { NotFoundError } from '../../shared/errors'
 import type {
   CreateDailyReportDto,
@@ -8,6 +8,7 @@ import type {
   DailyReportsStatsQueryDto,
   ListDailyReportsQueryDto,
   UpdateDailyReportVisitTypeDto,
+  PutDailyReportSheetRowDto,
 } from './daily-reports.schema'
 
 type ReportFilters = Pick<
@@ -24,6 +25,61 @@ const DEFAULT_VISIT_TYPES: Array<{ name: string; description: string; price: str
 
 export class DailyReportsService {
   constructor(private db: DB) {}
+
+  async listSheet(date: string) {
+    return this.db
+      .select({
+        ...getTableColumns(dailyReportSheetRows),
+        patient: {
+          firstName: patients.firstName,
+          lastName: patients.lastName,
+          nationalId: patients.nationalId,
+        },
+      })
+      .from(dailyReportSheetRows)
+      .innerJoin(patients, eq(dailyReportSheetRows.patientId, patients.id))
+      .where(eq(dailyReportSheetRows.reportDate, date))
+      .orderBy(desc(dailyReportSheetRows.createdAt), dailyReportSheetRows.id)
+  }
+
+  async putSheetRow(id: string, dto: PutDailyReportSheetRowDto, recordedBy: string) {
+    const [patient] = await this.db.select({ id: patients.id }).from(patients)
+      .where(eq(patients.id, dto.patientId)).limit(1)
+    if (!patient) throw new NotFoundError('Patient')
+
+    const values = {
+      ...dto,
+      bankAmount: dto.bankAmount.toFixed(2),
+      posAmount: dto.posAmount.toFixed(2),
+      cashAmount: dto.cashAmount.toFixed(2),
+    }
+    const table = dailyReportSheetRows
+    const [row] = await this.db.insert(table)
+      .values({ id, ...values, recordedBy })
+      .onConflictDoUpdate({
+        target: table.id,
+        set: {
+          ...values,
+          // Preserve timestamps on identical retries, while always returning the row atomically.
+          updatedAt: sql`CASE WHEN
+            (${table.reportDate}, ${table.patientId}, ${table.visitType}, ${table.category},
+             ${table.bankAmount}, ${table.posAmount}, ${table.cashAmount})
+            IS DISTINCT FROM
+            (excluded.report_date, excluded.patient_id, excluded.visit_type, excluded.category,
+             excluded.bank_amount, excluded.pos_amount, excluded.cash_amount)
+            THEN now() ELSE ${table.updatedAt} END`,
+        },
+      })
+      .returning()
+    return row
+  }
+
+  async deleteSheetRow(id: string) {
+    const [deleted] = await this.db.delete(dailyReportSheetRows)
+      .where(eq(dailyReportSheetRows.id, id)).returning()
+    if (!deleted) throw new NotFoundError('Daily report sheet row')
+    return deleted
+  }
 
   async ensureDefaults() {
     const [existing] = await this.db

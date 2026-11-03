@@ -7,6 +7,12 @@ export async function dailyReportsRoutes(fastify: FastifyInstance) {
   const service = new DailyReportsService(fastify.db)
   const controller = new DailyReportsController(service)
 
+  fastify.get('/sheet', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.listSheet(req, rep))
+
+  fastify.put('/sheet/:id', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.putSheetRow(req, rep))
+
+  fastify.delete('/sheet/:id', { preHandler: requireRole('admin_doctor', 'doctor') }, (req, rep) => controller.deleteSheetRow(req, rep))
+
   fastify.get<{ Querystring: { reportDate?: string; from?: string; to?: string; paymentMethod?: string; procedure?: string; visitType?: string; patientId?: string } }>(
     '/',
     { preHandler: requireRole('admin_doctor', 'doctor') },

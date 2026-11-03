@@ -4,6 +4,28 @@ export const PROCEDURE_KEYS = ['mixed_laser', 'single_laser', 'colonoscopy', 'co
 
 export const PAYMENT_METHODS = ['card_terminal', 'cash'] as const
 
+export const SHEET_CATEGORIES = ['visit', 'mixed_laser', 'single_laser', 'colposcopy', 'co_test', 'miscellaneous'] as const
+
+const SheetDateSchema = z.iso.date().refine((value) => !value.startsWith('0000-'), 'Invalid calendar date')
+const SheetAmountSchema = z.number().min(0).max(9999999999.99).refine(
+  (value) => /^\d+(\.\d{1,2})?$/.test(String(value)),
+  'Amount must have at most two decimal places'
+)
+
+export const DailyReportSheetQuerySchema = z.object({ date: SheetDateSchema })
+export const DailyReportSheetParamsSchema = z.object({ id: z.string().uuid('Invalid sheet row ID') })
+export const PutDailyReportSheetRowSchema = z.object({
+  reportDate: SheetDateSchema,
+  patientId: z.string().uuid('Invalid patient ID'),
+  visitType: z.string().trim().min(1).max(100),
+  category: z.enum(SHEET_CATEGORIES),
+  bankAmount: SheetAmountSchema,
+  posAmount: SheetAmountSchema,
+  cashAmount: SheetAmountSchema,
+})
+
+export type PutDailyReportSheetRowDto = z.infer<typeof PutDailyReportSheetRowSchema>
+
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
 
 export const CreateDailyReportSchema = z.object({

@@ -1086,6 +1086,27 @@ export const dailyReports = pgTable('daily_reports', {
     patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_daily_reports_patient ON daily_reports(patient_id)`,
 }));
 
+export const dailyReportSheetRows = pgTable('daily_report_sheet_rows', {
+    id: uuid('id').primaryKey(),
+    reportDate: date('report_date').notNull(),
+    patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+    visitType: varchar('visit_type', { length: 100 }).notNull(),
+    category: varchar('category', { length: 30, enum: ['visit', 'mixed_laser', 'single_laser', 'colposcopy', 'co_test', 'miscellaneous'] }).notNull(),
+    bankAmount: decimal('bank_amount', { precision: 12, scale: 2 }).notNull(),
+    posAmount: decimal('pos_amount', { precision: 12, scale: 2 }).notNull(),
+    cashAmount: decimal('cash_amount', { precision: 12, scale: 2 }).notNull(),
+    recordedBy: uuid('recorded_by').notNull().references(() => users.id),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    reportDateIdx: index('idx_daily_report_sheet_rows_date').on(table.reportDate),
+    patientIdx: index('idx_daily_report_sheet_rows_patient').on(table.patientId),
+    categoryCheck: check('chk_daily_report_sheet_rows_category', sql`${table.category} IN ('visit', 'mixed_laser', 'single_laser', 'colposcopy', 'co_test', 'miscellaneous')`),
+    bankAmountCheck: check('chk_daily_report_sheet_rows_bank_amount', sql`${table.bankAmount} >= 0`),
+    posAmountCheck: check('chk_daily_report_sheet_rows_pos_amount', sql`${table.posAmount} >= 0`),
+    cashAmountCheck: check('chk_daily_report_sheet_rows_cash_amount', sql`${table.cashAmount} >= 0`),
+}));
+
 export const dailyReportVisitTypes = pgTable('daily_report_visit_types', {
     id: uuid('id').primaryKey().defaultRandom(),
     name: varchar('name', { length: 100 }).notNull(),

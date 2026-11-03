@@ -169,6 +169,13 @@
       "when": 1791231500000,
       "tag": "0023_show_active_bookings",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793737990239,
+      "tag": "0024_daily_report_sheet_rows",
+      "breakpoints": true
     }
   ]
 }

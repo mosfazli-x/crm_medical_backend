@@ -1,5 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { DailyReportsService } from './daily-reports.service'
+import { UnauthorizedError } from '../../shared/errors'
 import {
   CreateDailyReportSchema,
   CreateDailyReportVisitTypeSchema,
@@ -7,6 +8,9 @@ import {
   DailyReportsStatsQuerySchema,
   ListDailyReportsQuerySchema,
   UpdateDailyReportVisitTypeSchema,
+  DailyReportSheetQuerySchema,
+  DailyReportSheetParamsSchema,
+  PutDailyReportSheetRowSchema,
 } from './daily-reports.schema'
 
 type ListQuery = FastifyRequest<{ Querystring: { reportDate?: string; from?: string; to?: string; paymentMethod?: string; procedure?: string; visitType?: string; patientId?: string } }>
@@ -14,6 +18,26 @@ type StatsQuery = FastifyRequest<{ Querystring: { from?: string; to?: string; pa
 
 export class DailyReportsController {
   constructor(private dailyReportsService: DailyReportsService) {}
+
+  async listSheet(request: FastifyRequest, reply: FastifyReply) {
+    const { date } = DailyReportSheetQuerySchema.parse(request.query)
+    const data = await this.dailyReportsService.listSheet(date)
+    return reply.status(200).send({ success: true, data })
+  }
+
+  async putSheetRow(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = DailyReportSheetParamsSchema.parse(request.params)
+    const dto = PutDailyReportSheetRowSchema.parse(request.body)
+    if (!request.user?.id) throw new UnauthorizedError()
+    const data = await this.dailyReportsService.putSheetRow(id, dto, request.user.id)
+    return reply.status(200).send({ success: true, message: 'Daily report sheet row saved successfully', data })
+  }
+
+  async deleteSheetRow(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = DailyReportSheetParamsSchema.parse(request.params)
+    await this.dailyReportsService.deleteSheetRow(id)
+    return reply.status(200).send({ success: true, message: 'Daily report sheet row deleted successfully' })
+  }
 
   async create(request: FastifyRequest, reply: FastifyReply) {
     const dto = CreateDailyReportSchema.parse(request.body)
