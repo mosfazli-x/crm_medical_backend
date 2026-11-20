@@ -1,0 +1,1 @@
+ALTER TABLE "lab_results" ALTER COLUMN "value" SET DATA TYPE text;

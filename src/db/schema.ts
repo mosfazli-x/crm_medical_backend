@@ -383,6 +383,53 @@ export const attachments = pgTable('attachments', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// ─── Document Intelligence (AI extraction of medical documents) ───
+
+export const documentExtractions = pgTable('document_extractions', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    attachmentId: uuid('attachment_id')
+        .notNull()
+        .references(() => attachments.id, { onDelete: 'cascade' }),
+    patientId: uuid('patient_id')
+        .notNull()
+        .references(() => patients.id, { onDelete: 'cascade' }),
+    status: varchar('status', { length: 20 }).default('pending').notNull(),
+    documentType: varchar('document_type', { length: 50 }),
+    rawText: text('raw_text'),
+    structuredData: jsonb('structured_data'),
+    confidence: decimal('confidence', { precision: 4, scale: 3 }),
+    model: varchar('model', { length: 100 }),
+    promptVersion: varchar('prompt_version', { length: 20 }),
+    pageCount: integer('page_count'),
+    error: text('error'),
+    attempts: integer('attempts').default(0).notNull(),
+    processedAt: timestamp('processed_at'),
+    reviewedById: uuid('reviewed_by_id').references(() => users.id),
+    reviewedAt: timestamp('reviewed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    attachmentUnique: uniqueIndex('uq_document_extractions_attachment').on(table.attachmentId),
+    patientIdx: index('idx_document_extractions_patient').on(table.patientId),
+    statusIdx: index('idx_document_extractions_status').on(table.status),
+}));
+
+export const documentProcessingJobs = pgTable('document_processing_jobs', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    attachmentId: uuid('attachment_id')
+        .notNull()
+        .references(() => attachments.id, { onDelete: 'cascade' }),
+    status: varchar('status', { length: 20 }).default('queued').notNull(),
+    attempts: integer('attempts').default(0).notNull(),
+    nextAttemptAt: timestamp('next_attempt_at').defaultNow().notNull(),
+    lockedAt: timestamp('locked_at'),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    attachmentUnique: uniqueIndex('uq_document_processing_jobs_attachment').on(table.attachmentId),
+    statusIdx: index('idx_document_processing_jobs_status').on(table.status, table.nextAttemptAt),
+}));
+
 export const doctorAvailability = pgTable('doctor_availability', {
     id: uuid('id').primaryKey().defaultRandom(),
     doctorId: uuid('doctor_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -532,7 +579,7 @@ export const labResults = pgTable('lab_results', {
     category: varchar('category', { length: 50 }).notNull(),
     testName: varchar('test_name', { length: 200 }).notNull(),
     testCode: varchar('test_code', { length: 50 }),
-    value: varchar('value', { length: 100 }),
+    value: text('value'),
     unit: varchar('unit', { length: 50 }),
     referenceRangeLow: varchar('reference_range_low', { length: 50 }),
     referenceRangeHigh: varchar('reference_range_high', { length: 50 }),
@@ -543,6 +590,9 @@ export const labResults = pgTable('lab_results', {
     performedBy: varchar('performed_by', { length: 200 }),
     validatedById: uuid('validated_by_id').references(() => users.id),
     validatedAt: timestamp('validated_at'),
+    sourceAttachmentId: uuid('source_attachment_id').references(() => attachments.id, { onDelete: 'set null' }),
+    extractionId: uuid('extraction_id').references(() => documentExtractions.id, { onDelete: 'set null' }),
+    reviewStatus: varchar('review_status', { length: 20 }).default('manual'),
     notes: text('notes'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
@@ -552,6 +602,7 @@ export const labResults = pgTable('lab_results', {
     performedDateIdx: sql`CREATE INDEX IF NOT EXISTS idx_lab_results_performed_date ON lab_results(performed_date)`,
     labOrderIdx: sql`CREATE INDEX IF NOT EXISTS idx_lab_results_lab_order ON lab_results(lab_order_id)`,
     reportTypeIdx: sql`CREATE INDEX IF NOT EXISTS idx_lab_results_report_type ON lab_results(report_type)`,
+    extractionIdx: sql`CREATE INDEX IF NOT EXISTS idx_lab_results_extraction ON lab_results(extraction_id)`,
 }))
 
 export const procedureCodes = pgTable('procedure_codes', {
@@ -1360,4 +1411,46 @@ export const knowledgeChunks = pgTable('knowledge_chunks', {
     uniqSourceChunk: uniqueIndex('uq_knowledge_chunks_source_chunk').on(table.sourceType, table.sourceRef, table.chunkIndex),
     chkSourceType: check('chk_knowledge_chunks_source_type', sql`${table.sourceType} IN ('faq', 'system', 'site')`),
     chkLanguage: check('chk_knowledge_chunks_language', sql`${table.language} IN ('fa', 'en', 'both')`),
+}));
+
+// ─── Automated, selective SMS broadcasts to patients ───
+
+export const smsBroadcasts = pgTable('sms_broadcasts', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 150 }).notNull(),
+    message: text('message').notNull(),
+    targetType: varchar('target_type', { length: 20 }).notNull().default('all'),
+    targetPatientIds: jsonb('target_patient_ids').$type<string[] | null>(),
+    daysOfWeek: jsonb('days_of_week').$type<number[]>().notNull().default([]),
+    hour: integer('hour').notNull().default(9),
+    minute: integer('minute').notNull().default(0),
+    isActive: boolean('is_active').default(true).notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    lastRunAt: timestamp('last_run_at'),
+    nextRunAt: timestamp('next_run_at'),
+    totalSent: integer('total_sent').default(0).notNull(),
+    totalFailed: integer('total_failed').default(0).notNull(),
+}, (table) => ({
+    activeIdx: index('idx_sms_broadcasts_active').on(table.isActive),
+    chkTargetType: check('chk_sms_broadcasts_target_type', sql`${table.targetType} IN ('all', 'specific')`),
+    chkHour: check('chk_sms_broadcasts_hour', sql`${table.hour} BETWEEN 0 AND 23`),
+    chkMinute: check('chk_sms_broadcasts_minute', sql`${table.minute} BETWEEN 0 AND 59`),
+}));
+
+export const smsBroadcastLogs = pgTable('sms_broadcast_logs', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    broadcastId: uuid('broadcast_id').notNull().references(() => smsBroadcasts.id, { onDelete: 'cascade' }),
+    patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+    sentAt: timestamp('sent_at').defaultNow().notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('sent'),
+    error: text('error'),
+    phone: varchar('phone', { length: 20 }),
+}, (table) => ({
+    broadcastIdx: index('idx_sms_broadcast_logs_broadcast').on(table.broadcastId),
+    patientIdx: index('idx_sms_broadcast_logs_patient').on(table.patientId),
+    sentAtIdx: index('idx_sms_broadcast_logs_sent_at').on(table.sentAt),
+    statusIdx: index('idx_sms_broadcast_logs_status').on(table.status),
+    uniqBroadcastPatientDay: sql`CREATE UNIQUE INDEX IF NOT EXISTS uq_sms_broadcast_logs_broadcast_patient_day ON sms_broadcast_logs(broadcast_id, patient_id, date(sent_at))`,
 }));

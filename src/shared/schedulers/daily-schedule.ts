@@ -22,3 +22,16 @@ export function msUntilNextRun(from: Date, hour: number, minute: number): number
   }
   return next.getTime() - from.getTime()
 }
+
+/**
+ * Milliseconds from `from` until the next hour boundary (minute 0, second 0).
+ *
+ * Strictly greater: scheduling for the current minute must not yield a zero
+ * delay, otherwise the job would fire immediately and in a tight loop.
+ */
+export function msUntilNextHour(from: Date): number {
+  const next = new Date(from)
+  next.setMinutes(0, 0, 0)
+  next.setHours(next.getHours() + 1)
+  return next.getTime() - from.getTime()
+}

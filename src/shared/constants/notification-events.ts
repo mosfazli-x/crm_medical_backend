@@ -12,7 +12,7 @@ export interface NotificationEvent {
   key: string
   label: string
   description: string
-  category: 'auth' | 'patient' | 'appointment' | 'messaging' | 'followup'
+  category: 'auth' | 'patient' | 'appointment' | 'messaging' | 'followup' | 'broadcast'
   channels: ('sms' | 'telegram')[]
   /** If true, this event is critical and cannot be fully disabled (e.g. OTP) */
   critical?: boolean
@@ -99,6 +99,15 @@ export const NOTIFICATION_EVENTS: NotificationEvent[] = [
     category: 'messaging',
     channels: ['sms', 'telegram'],
   },
+
+  // ── Automated SMS Broadcasts ──
+  {
+    key: 'broadcast_sms',
+    label: 'پیامک گروهی خودکار',
+    description: 'ارسال پیامک گروهی به بیماران بر اساس برنامه‌دهی هفتگی',
+    category: 'broadcast',
+    channels: ['sms'],
+  },
 ]
 
 export const NOTIFICATION_CATEGORIES = [
@@ -107,6 +116,7 @@ export const NOTIFICATION_CATEGORIES = [
   { key: 'appointment', label: 'نوبت‌دهی', icon: 'mdi-calendar-clock', color: 'orange' },
   { key: 'followup', label: 'یادآوری مراجعه', icon: 'mdi-calendar-sync', color: 'teal' },
   { key: 'messaging', label: 'پیام‌رسانی', icon: 'mdi-message-text', color: 'purple' },
+  { key: 'broadcast', label: 'پیامک گروهی', icon: 'mdi-cellphone-sms', color: 'indigo' },
 ] as const
 
 export function getSettingKeyForEvent(eventKey: string, channel: 'sms' | 'telegram'): string {

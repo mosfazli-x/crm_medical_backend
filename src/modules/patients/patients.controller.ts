@@ -9,6 +9,7 @@ import { attachments } from '../../db/schema.js'
 import { getDb } from '../../db/client.js'
 import { eq, and } from 'drizzle-orm'
 import { env } from '../../config/env.js'
+import { DocumentExtractionService } from '../document-intelligence/document-intelligence.service.js'
 
 export class PatientController {
   constructor(private patientService: PatientService) { }
@@ -54,7 +55,19 @@ export class PatientController {
           storagePath: file.relativePath,
         }))
         const db = getDb()
-        await db.insert(attachments).values(attachmentRows)
+        const insertedAttachments = await db
+          .insert(attachments)
+          .values(attachmentRows)
+          .returning({ id: attachments.id })
+
+        try {
+          await new DocumentExtractionService(db).enqueueForAttachmentIds(
+            newPatient.id,
+            insertedAttachments.map((row) => row.id),
+          )
+        } catch (error) {
+          request.log.warn({ error }, 'Failed to queue document extraction for new patient')
+        }
       }
 
       if (newPatient.phone) {
@@ -122,6 +135,7 @@ export class PatientController {
 
     const { files: bufferedFiles, fields } = await parseMultipart(request.parts())
     let savedFiles: Awaited<ReturnType<typeof saveBufferedFiles>> = []
+    const uploadStartedAt = new Date()
 
     try {
       const rawPatient = fields.patient ? JSON.parse(fields.patient as string) : null
@@ -137,6 +151,18 @@ export class PatientController {
       }
 
       const result = await this.patientService.update(patientId, dto, savedFiles)
+
+      if (savedFiles.length > 0) {
+        try {
+          await new DocumentExtractionService(getDb()).enqueueForFileHashes(
+            patientId,
+            savedFiles.map((file) => file.fileHash),
+            uploadStartedAt,
+          )
+        } catch (error) {
+          request.log.warn({ error }, 'Failed to queue document extraction after patient update')
+        }
+      }
 
       await auditService.log({
         userId: (request.user as any)?.id,
@@ -298,10 +324,21 @@ export class PatientController {
     }
 
     let savedFiles: Awaited<ReturnType<typeof saveBufferedFiles>> = []
+    const uploadStartedAt = new Date()
     try {
       bufferedFiles.forEach((f) => { f.type = requestedType })
       savedFiles = await saveBufferedFiles(bufferedFiles, patientId)
       const data = await this.patientService.addAttachments(patientId, savedFiles)
+
+      try {
+        await new DocumentExtractionService(getDb()).enqueueForFileHashes(
+          patientId,
+          savedFiles.map((file) => file.fileHash),
+          uploadStartedAt,
+        )
+      } catch (error) {
+        request.log.warn({ error }, 'Failed to queue document extraction after upload')
+      }
 
       await auditService.log({
         userId: (request.user as any)?.id,

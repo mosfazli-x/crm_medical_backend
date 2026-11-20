@@ -1,6 +1,6 @@
 import type { DB } from '../../db/client'
 import {
-  patients, diseases, medications, allergies, visits, pregnancies, attachments,
+  patients, diseases, medications, allergies, visits, pregnancies, attachments, documentExtractions,
   menstrualHistory, sexualHistory, gynecologicalSurgeries, contraceptiveHistory,
   familyHistory, reproductiveSummary, prenatalVisits, fetalMeasurements, postpartumCarePlans,
   screeningSchedules, screeningResults, labResults, consentRecords, vaccinations
@@ -147,8 +147,14 @@ export class PatientProfileService {
           mimeType: attachments.mimeType,
           storagePath: attachments.storagePath,
           createdAt: attachments.createdAt,
+          extractionId: documentExtractions.id,
+          extractionStatus: documentExtractions.status,
+          extractionDocumentType: documentExtractions.documentType,
+          extractionConfidence: documentExtractions.confidence,
+          extractionProcessedAt: documentExtractions.processedAt,
         })
         .from(attachments)
+        .leftJoin(documentExtractions, eq(documentExtractions.attachmentId, attachments.id))
         .where(and(eq(attachments.patientId, patientId), eq(attachments.isDeleted, false)))
 
       const addDownloadUrl = (file: any) => ({

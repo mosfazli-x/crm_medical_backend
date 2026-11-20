@@ -58,11 +58,35 @@ const envSchema = z.object({
   FOLLOWUP_REMINDER_HOUR: z.coerce.number().int().min(0).max(23).default(9),
   FOLLOWUP_REMINDER_MINUTE: z.coerce.number().int().min(0).max(59).default(0),
 
+  // Automated selective SMS broadcasts to patients
+  SMS_BROADCAST_ENABLED: z.preprocess(
+    (val) => val === 'true' || val === '1' || val === true || val === 1,
+    z.boolean()
+  ).default(true),
+  SMS_BROADCAST_HOUR: z.coerce.number().int().min(0).max(23).default(9),
+  SMS_BROADCAST_MINUTE: z.coerce.number().int().min(0).max(59).default(0),
+
   // AI Support
   GEMINI_API_KEY: z.string().optional(),
+  GEMINI_PROXY: z.string().url().optional(),
   GROQ_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
   GEMINI_EMBEDDING_MODEL: z.string().default('text-embedding-004'),
+
+  // Document Intelligence (AI extraction of uploaded medical documents)
+  DOCUMENT_AI_ENABLED: z.preprocess(
+    (val) => val === 'true' || val === '1' || val === true || val === 1,
+    z.boolean()
+  ).default(true),
+  DOCUMENT_AI_PROVIDER: z.enum(['medical_document_ai', 'gemini']).default('medical_document_ai'),
+  DOCUMENT_AI_MODEL: z.string().optional(),
+  DOCUMENT_AI_PROMPT_VERSION: z.string().default('1.0.0'),
+  DOCUMENT_AI_MAX_FILE_MB: z.coerce.number().int().positive().default(20),
+  DOCUMENT_AI_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
+  DOCUMENT_AI_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
+  DOCUMENT_AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
+  MEDICAL_DOCUMENT_AI_URL: z.string().url().optional(),
+  MEDICAL_DOCUMENT_AI_API_KEY: z.string().optional(),
   TELEGRAM_SUPPORT_CHAT_ID: z.string().optional(),
   SUPPORT_AI_ENABLED: z.preprocess(
     (val) => val === 'true' || val === '1' || val === true || val === 1,

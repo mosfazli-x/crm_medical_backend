@@ -8,6 +8,7 @@ import {
   allergies,
   pregnancies,
   attachments,
+  documentExtractions,
   vaccinations,
 } from '../../db/schema'
 import { eq, and, or, notInArray, asc, desc, sql, ilike, inArray, gte, lte } from 'drizzle-orm'
@@ -659,8 +660,14 @@ export class PatientService {
         mimeType: attachments.mimeType,
         storagePath: attachments.storagePath,
         createdAt: attachments.createdAt,
+        extractionId: documentExtractions.id,
+        extractionStatus: documentExtractions.status,
+        extractionDocumentType: documentExtractions.documentType,
+        extractionConfidence: documentExtractions.confidence,
+        extractionProcessedAt: documentExtractions.processedAt,
       })
       .from(attachments)
+      .leftJoin(documentExtractions, eq(documentExtractions.attachmentId, attachments.id))
       .where(and(eq(attachments.patientId, patientId), eq(attachments.isDeleted, false)))
       .orderBy(desc(attachments.createdAt))
   }

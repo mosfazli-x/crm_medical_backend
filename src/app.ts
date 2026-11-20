@@ -82,6 +82,8 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: '/api/auth' })
   await app.register(patientRoutes, { prefix: '/api/patients' })
   await app.register(patientRoutes, { prefix: '/api/patient' })
+  await app.register(documentIntelligenceRoutes, { prefix: '/api/patients' })
+  await app.register(documentIntelligenceRoutes, { prefix: '/api/patient' })
   await app.register(visitRoutes, { prefix: '/api/visits' })
   await app.register(userRoutes, { prefix: '/api/users' })
   await app.register(schedulingRoutes, { prefix: '/api/scheduling' })
@@ -114,6 +116,7 @@ export async function buildApp() {
   await app.register(leadsRoutes, { prefix: '/api/leads' })
   await app.register(dailyReportsRoutes, { prefix: '/api/daily-reports' })
   await app.register(scheduleRoutes, { prefix: '/api/schedule' })
+  await app.register(smsBroadcastRoutes, { prefix: '/api/sms-broadcast' })
   await app.register(miniAppRoutes, { prefix: '/api/miniapp' })
   await app.register(ocrRoutes, { prefix: '/api/ocr' })
   await app.register(faqRoutes, { prefix: '/api/faq' })
@@ -139,6 +142,9 @@ export async function buildApp() {
 
   // Daily follow-up reminder SMS sweep
   startFollowUpReminderScheduler((app as any).db)
+
+  // Automated, selective SMS broadcasts to patients (hourly tick scheduler)
+  startSmsBroadcastScheduler((app as any).db)
 
   app.get('/health', async (_, reply) => {
     try {
@@ -192,8 +198,11 @@ import { cashbookRoutes } from './modules/cashbook/cashbook.routes'
 import { scheduleRoutes } from './modules/schedule'
 import { miniAppRoutes } from './modules/miniapp'
 import { ocrRoutes } from './modules/ocr'
+import { documentIntelligenceRoutes } from './modules/document-intelligence'
 import { faqRoutes, aiSupportRoutes } from './modules/support'
 import { patientNotesRoutes } from './modules/patient-notes'
 import { loginHistoryRoutes } from './modules/login-history'
 import { blogRoutes } from './modules/blog'
+import { smsBroadcastRoutes } from './modules/sms-broadcast'
+import { startSmsBroadcastScheduler } from './shared/schedulers/sms-broadcast.scheduler'
 import { SettingsService } from './modules/settings'
