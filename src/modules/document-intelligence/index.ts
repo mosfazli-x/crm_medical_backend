@@ -1,4 +1,7 @@
-export { documentIntelligenceRoutes } from './document-intelligence.routes'
+export {
+  documentIntelligenceRoutes,
+  documentIntelligenceWorkspaceRoutes,
+} from './document-intelligence.routes'
 export { DocumentExtractionService } from './document-intelligence.service'
 export { DocumentIntelligenceController } from './document-intelligence.controller'
 export { startDocumentExtractionWorker } from './document-intelligence.worker'

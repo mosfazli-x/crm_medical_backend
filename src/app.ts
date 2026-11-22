@@ -84,6 +84,7 @@ export async function buildApp() {
   await app.register(patientRoutes, { prefix: '/api/patient' })
   await app.register(documentIntelligenceRoutes, { prefix: '/api/patients' })
   await app.register(documentIntelligenceRoutes, { prefix: '/api/patient' })
+  await app.register(documentIntelligenceWorkspaceRoutes, { prefix: '/api/document-intelligence' })
   await app.register(visitRoutes, { prefix: '/api/visits' })
   await app.register(userRoutes, { prefix: '/api/users' })
   await app.register(schedulingRoutes, { prefix: '/api/scheduling' })
@@ -111,6 +112,7 @@ export async function buildApp() {
   await app.register(inventoryRoutes, { prefix: '/api/inventory' })
   await app.register(consumablesRoutes, { prefix: '/api/consumables' })
   await app.register(cashbookRoutes, { prefix: '/api/cashbook' })
+  await app.register(financeIngestRoutes, { prefix: '/api/finance' })
   await app.register(patientUsageRoutes, { prefix: '/api/patient-usage' })
   await app.register(leadSourcesRoutes, { prefix: '/api/lead-sources' })
   await app.register(leadsRoutes, { prefix: '/api/leads' })
@@ -195,10 +197,14 @@ import { leadsRoutes } from './modules/leads'
 import { dailyReportsRoutes, DailyReportsService } from './modules/daily-reports'
 import { consumablesRoutes, ConsumablesService } from './modules/consumables'
 import { cashbookRoutes } from './modules/cashbook/cashbook.routes'
+import { financeIngestRoutes } from './modules/finance-ingest'
 import { scheduleRoutes } from './modules/schedule'
 import { miniAppRoutes } from './modules/miniapp'
 import { ocrRoutes } from './modules/ocr'
-import { documentIntelligenceRoutes } from './modules/document-intelligence'
+import {
+  documentIntelligenceRoutes,
+  documentIntelligenceWorkspaceRoutes,
+} from './modules/document-intelligence'
 import { faqRoutes, aiSupportRoutes } from './modules/support'
 import { patientNotesRoutes } from './modules/patient-notes'
 import { loginHistoryRoutes } from './modules/login-history'

@@ -278,6 +278,12 @@ export const cashbookAccounts = pgTable('cashbook_accounts', {
     name: varchar('name', { length: 120 }).notNull(),
     type: varchar('type', { length: 30 }).default('cash').notNull(),
     openingBalanceRial: bigint('opening_balance_rial', { mode: 'bigint' }).default(sql`0`).notNull(),
+    /** Bank identifier used to match inbound SMS/statement rows (e.g. `melli`). */
+    bankCode: varchar('bank_code', { length: 40 }),
+    /** Last four digits of the account card, as printed on bank SMS alerts. */
+    cardLast4: varchar('card_last4', { length: 4 }),
+    /** Last four digits of the IBAN/account number. */
+    ibanLast4: varchar('iban_last4', { length: 4 }),
     isArchived: boolean('is_archived').default(false).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -285,6 +291,7 @@ export const cashbookAccounts = pgTable('cashbook_accounts', {
     userIdx: index('idx_cashbook_accounts_user').on(table.userId, table.isArchived),
     userNameUnique: uniqueIndex('uq_cashbook_accounts_user_name').on(table.userId, table.name),
     typeCheck: check('chk_cashbook_accounts_type', sql`${table.type} IN ('cash', 'bank', 'card', 'other')`),
+    bankMatchIdx: index('idx_cashbook_accounts_bank_match').on(table.userId, table.bankCode, table.cardLast4),
 }));
 
 export const cashbookEntries = pgTable('cashbook_entries', {
@@ -298,6 +305,12 @@ export const cashbookEntries = pgTable('cashbook_entries', {
     description: text('description').notNull(),
     notes: text('notes'),
     reference: varchar('reference', { length: 100 }),
+    /** Source that produced this entry automatically, if any. */
+    sourceId: uuid('source_id'),
+    /** Bank/provider reference used for idempotent ingestion. */
+    externalRef: varchar('external_ref', { length: 120 }),
+    /** Links the two legs of an internal transfer (same value on both rows). */
+    transferGroupId: uuid('transfer_group_id'),
     status: varchar('status', { length: 20 }).default('active').notNull(),
     voidReason: text('void_reason'),
     voidedAt: timestamp('voided_at'),
@@ -308,6 +321,9 @@ export const cashbookEntries = pgTable('cashbook_entries', {
     userStatusIdx: index('idx_cashbook_entries_user_status').on(table.userId, table.status),
     categoryIdx: index('idx_cashbook_entries_category').on(table.categoryId),
     accountIdx: index('idx_cashbook_entries_account').on(table.accountId),
+    sourceIdx: index('idx_cashbook_entries_source').on(table.sourceId),
+    transferIdx: index('idx_cashbook_entries_transfer').on(table.transferGroupId),
+    externalRefUnique: uniqueIndex('uq_cashbook_entries_external_ref').on(table.userId, table.externalRef),
     kindCheck: check('chk_cashbook_entries_kind', sql`${table.kind} IN ('income', 'expense')`),
     statusCheck: check('chk_cashbook_entries_status', sql`${table.status} IN ('active', 'voided')`),
     amountCheck: check('chk_cashbook_entries_amount', sql`${table.amountRial} > 0`),
@@ -635,6 +651,117 @@ export const billingRecords = pgTable('billing_records', {
     patientIdx: sql`CREATE INDEX IF NOT EXISTS idx_billing_records_patient ON billing_records(patient_id)`,
     visitIdx: sql`CREATE INDEX IF NOT EXISTS idx_billing_records_visit ON billing_records(visit_id)`,
     statusIdx: sql`CREATE INDEX IF NOT EXISTS idx_billing_records_status ON billing_records(status)`,
+}));
+
+/* ─────────────────────────────────────────────────────────────
+   Finance ingestion (bank SMS → cashbook)
+   ───────────────────────────────────────────────────────────── */
+
+/**
+ * A configured bank/SMS channel for one ledger. Users set this up once per
+ * bank sender: which account it posts to, default direction and category.
+ */
+export const financeSources = pgTable('finance_sources', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    label: varchar('label', { length: 120 }).notNull(),
+    channel: varchar('channel', { length: 20 }).default('sms').notNull(),
+    bankCode: varchar('bank_code', { length: 40 }).notNull(),
+    /** Sender numbers / sender names this channel accepts. */
+    senderPatterns: jsonb('sender_patterns').default([]).notNull(),
+    cardLast4: varchar('card_last4', { length: 4 }),
+    accountId: uuid('account_id').notNull().references(() => cashbookAccounts.id, { onDelete: 'cascade' }),
+    incomeCategoryId: uuid('income_category_id').references(() => cashbookCategories.id),
+    expenseCategoryId: uuid('expense_category_id').references(() => cashbookCategories.id),
+    autoPost: boolean('auto_post').default(true).notNull(),
+    isActive: boolean('is_active').default(true).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    userIdx: index('idx_finance_sources_user').on(table.userId, table.isActive),
+    accountIdx: index('idx_finance_sources_account').on(table.accountId),
+    bankIdx: index('idx_finance_sources_bank').on(table.bankCode),
+    channelCheck: check('chk_finance_sources_channel', sql`${table.channel} IN ('sms', 'android_app', 'ios_shortcut', 'manual', 'bank_api')`),
+}));
+
+/** Per-device credentials used by the mobile companions to post messages. */
+export const financeIngestTokens = pgTable('finance_ingest_tokens', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    label: varchar('label', { length: 120 }).notNull(),
+    platform: varchar('platform', { length: 20 }).default('unknown').notNull(),
+    /** SHA-256 of the device token; the plaintext is shown only once. */
+    tokenHash: varchar('token_hash', { length: 64 }).notNull(),
+    /** Short non-secret prefix so a device can be identified in the UI. */
+    tokenPrefix: varchar('token_prefix', { length: 12 }).notNull(),
+    lastSeenAt: timestamp('last_seen_at'),
+    messageCount: integer('message_count').default(0).notNull(),
+    isRevoked: boolean('is_revoked').default(false).notNull(),
+    revokedAt: timestamp('revoked_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    userIdx: index('idx_finance_ingest_tokens_user').on(table.userId, table.isRevoked),
+    hashUnique: uniqueIndex('uq_finance_ingest_tokens_hash').on(table.tokenHash),
+    platformCheck: check('chk_finance_ingest_tokens_platform', sql`${table.platform} IN ('android', 'ios', 'web', 'unknown')`),
+}));
+
+/**
+ * Every inbound message, parsed or not. The raw text is kept so templates can
+ * be fixed retroactively; `status` records what the pipeline decided.
+ */
+export const financeMessages = pgTable('finance_messages', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    ingestTokenId: uuid('ingest_token_id').references(() => financeIngestTokens.id, { onDelete: 'set null' }),
+    sourceId: uuid('source_id').references(() => financeSources.id, { onDelete: 'set null' }),
+    cashbookEntryId: uuid('cashbook_entry_id').references(() => cashbookEntries.id, { onDelete: 'set null' }),
+    /** Client-generated id + server dedupe key, both unique per ledger. */
+    clientMessageId: varchar('client_message_id', { length: 120 }),
+    dedupeKey: varchar('dedupe_key', { length: 64 }).notNull(),
+    channel: varchar('channel', { length: 20 }).default('sms').notNull(),
+    sender: varchar('sender', { length: 120 }),
+    rawText: text('raw_text').notNull(),
+    receivedAt: timestamp('received_at').notNull(),
+    /** Parser output, kept even when the message is rejected. */
+    parsed: jsonb('parsed'),
+    parserId: varchar('parser_id', { length: 60 }),
+    confidence: integer('confidence').default(0).notNull(),
+    direction: varchar('direction', { length: 20 }),
+    amountRial: bigint('amount_rial', { mode: 'bigint' }),
+    balanceRial: bigint('balance_rial', { mode: 'bigint' }),
+    cardLast4: varchar('card_last4', { length: 4 }),
+    externalRef: varchar('external_ref', { length: 120 }),
+    status: varchar('status', { length: 20 }).default('review').notNull(),
+    rejectionReason: varchar('rejection_reason', { length: 120 }),
+    reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    reviewedAt: timestamp('reviewed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    userStatusIdx: index('idx_finance_messages_user_status').on(table.userId, table.status),
+    userReceivedIdx: index('idx_finance_messages_user_received').on(table.userId, table.receivedAt),
+    dedupeUnique: uniqueIndex('uq_finance_messages_dedupe').on(table.userId, table.dedupeKey),
+    clientUnique: uniqueIndex('uq_finance_messages_client').on(table.userId, table.clientMessageId),
+    entryIdx: index('idx_finance_messages_entry').on(table.cashbookEntryId),
+    statusCheck: check('chk_finance_messages_status', sql`${table.status} IN ('posted', 'review', 'duplicate', 'ignored', 'failed')`),
+    directionCheck: check('chk_finance_messages_direction', sql`${table.direction} IS NULL OR ${table.direction} IN ('income', 'expense')`),
+}));
+
+/** Links a cashbook entry to one or more patient invoices (partial payments). */
+export const paymentAllocations = pgTable('payment_allocations', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    entryId: uuid('entry_id').notNull().references(() => cashbookEntries.id, { onDelete: 'cascade' }),
+    billingRecordId: uuid('billing_record_id').notNull().references(() => billingRecords.id, { onDelete: 'cascade' }),
+    amountRial: bigint('amount_rial', { mode: 'bigint' }).notNull(),
+    matchType: varchar('match_type', { length: 30 }).default('manual').notNull(),
+    confidence: integer('confidence').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    entryIdx: index('idx_payment_allocations_entry').on(table.entryId),
+    billingIdx: index('idx_payment_allocations_billing').on(table.billingRecordId),
+    entryBillingUnique: uniqueIndex('uq_payment_allocations_entry_billing').on(table.entryId, table.billingRecordId),
+    matchCheck: check('chk_payment_allocations_match', sql`${table.matchType} IN ('manual', 'reference', 'card', 'name', 'amount')`),
+    amountCheck: check('chk_payment_allocations_amount', sql`${table.amountRial} > 0`),
 }));
 
 export const prenatalVisits = pgTable('prenatal_visits', {

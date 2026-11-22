@@ -1,11 +1,12 @@
 import fs from 'node:fs/promises'
-import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 import type { DB } from '../../db/client'
 import {
   attachments,
   documentExtractions,
   documentProcessingJobs,
   labResults,
+  patients,
 } from '../../db/schema'
 import { env } from '../../config/env'
 import { AppError, ConflictError, NotFoundError } from '../../shared/errors'
@@ -52,6 +53,65 @@ export interface ExtractionView {
     createdAt: Date | null
   }
   extraction: ExtractionRow | null
+}
+
+export type DocumentOverviewStatus =
+  | 'none'
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'confirmed'
+
+export interface PatientDocumentOverview {
+  patient: {
+    id: string
+    firstName: string
+    lastName: string
+    nationalId: string | null
+    phone: string | null
+  }
+  documentCount: number
+  extractableCount: number
+  extractedTestCount: number
+  documentTypes: Array<{ type: string; count: number }>
+  statusCounts: Record<DocumentOverviewStatus, number>
+  lastUploadedAt: Date | null
+  lastProcessedAt: Date | null
+}
+
+export interface DocumentOverviewStats {
+  totalPatients: number
+  totalDocuments: number
+  pending: number
+  processing: number
+  completed: number
+  failed: number
+  confirmed: number
+  extractedTests: number
+}
+
+export interface DocumentOverviewResult {
+  patients: PatientDocumentOverview[]
+  stats: DocumentOverviewStats
+  generatedAt: Date
+}
+
+export interface PatientDocumentItem {
+  id: string
+  fileName: string
+  fileType: string
+  mimeType: string
+  fileSize: number
+  createdAt: Date | null
+  extractionId: string | null
+  status: DocumentOverviewStatus
+  documentType: string | null
+  confidence: string | null
+  processedAt: Date | null
+  error: string | null
+  testCount: number
+  extractable: boolean
 }
 
 export class DocumentExtractionService {
@@ -125,6 +185,316 @@ export class DocumentExtractionService {
       )
 
     return this.enqueueForAttachmentIds(patientId, rows.map((row) => row.id))
+  }
+
+  /**
+   * Aggregated view of every patient's uploaded documents and extraction
+   * progress. Used by the document intelligence workspace.
+   */
+  async getOverview(options: { search?: string; status?: string } = {}): Promise<DocumentOverviewResult> {
+    const rows = await this.db
+      .select({
+        patientId: patients.id,
+        firstName: patients.firstName,
+        lastName: patients.lastName,
+        nationalId: patients.nationalId,
+        phone: patients.phone,
+        attachmentId: attachments.id,
+        fileType: attachments.fileType,
+        fileName: attachments.fileName,
+        mimeType: attachments.mimeType,
+        createdAt: attachments.createdAt,
+        extractionStatus: documentExtractions.status,
+        extractionDocumentType: documentExtractions.documentType,
+        processedAt: documentExtractions.processedAt,
+        structuredData: documentExtractions.structuredData,
+      })
+      .from(attachments)
+      .innerJoin(patients, eq(patients.id, attachments.patientId))
+      .leftJoin(documentExtractions, eq(documentExtractions.attachmentId, attachments.id))
+      .where(and(eq(attachments.isDeleted, false), eq(patients.isDeleted, false)))
+      .orderBy(desc(attachments.createdAt))
+
+    const byPatient = new Map<string, PatientDocumentOverview>()
+    const stats: DocumentOverviewStats = {
+      totalPatients: 0,
+      totalDocuments: 0,
+      pending: 0,
+      processing: 0,
+      completed: 0,
+      failed: 0,
+      confirmed: 0,
+      extractedTests: 0,
+    }
+
+    for (const row of rows) {
+      let entry = byPatient.get(row.patientId)
+      if (!entry) {
+        entry = {
+          patient: {
+            id: row.patientId,
+            firstName: row.firstName,
+            lastName: row.lastName,
+            nationalId: row.nationalId ?? null,
+            phone: row.phone ?? null,
+          },
+          documentCount: 0,
+          extractableCount: 0,
+          extractedTestCount: 0,
+          documentTypes: [],
+          statusCounts: {
+            none: 0,
+            pending: 0,
+            processing: 0,
+            completed: 0,
+            failed: 0,
+            confirmed: 0,
+          },
+          lastUploadedAt: null,
+          lastProcessedAt: null,
+        }
+        byPatient.set(row.patientId, entry)
+      }
+
+      const status: DocumentOverviewStatus =
+        (row.extractionStatus as DocumentOverviewStatus | null) ?? 'none'
+
+      entry.documentCount++
+      entry.statusCounts[status]++
+
+      const type = row.fileType || row.extractionDocumentType || 'other'
+      const existingType = entry.documentTypes.find((item) => item.type === type)
+      if (existingType) existingType.count++
+      else entry.documentTypes.push({ type, count: 1 })
+
+      if (this.resolveMimeType(row.mimeType, row.fileName)) entry.extractableCount++
+
+      if (row.createdAt && (!entry.lastUploadedAt || row.createdAt > entry.lastUploadedAt)) {
+        entry.lastUploadedAt = row.createdAt
+      }
+      if (row.processedAt && (!entry.lastProcessedAt || row.processedAt > entry.lastProcessedAt)) {
+        entry.lastProcessedAt = row.processedAt
+      }
+
+      const testCount = this.countExtractedTests(row.structuredData)
+      entry.extractedTestCount += testCount
+
+      stats.totalDocuments++
+      stats.extractedTests += testCount
+      if (status !== 'none') stats[status]++
+    }
+
+    stats.totalPatients = byPatient.size
+
+    let list = Array.from(byPatient.values())
+
+    const search = options.search?.trim().toLowerCase()
+    if (search) {
+      list = list.filter(({ patient }) => {
+        const name = `${patient.firstName} ${patient.lastName}`.toLowerCase()
+        return (
+          name.includes(search) ||
+          (patient.nationalId ?? '').includes(search) ||
+          (patient.phone ?? '').includes(search)
+        )
+      })
+    }
+
+    const statusFilter = options.status?.trim()
+    if (statusFilter && statusFilter !== 'all') {
+      list = list.filter((entry) => {
+        if (statusFilter === 'pending') {
+          return entry.statusCounts.pending + entry.statusCounts.processing > 0
+        }
+        if (statusFilter === 'ready') return entry.statusCounts.completed > 0
+        return entry.statusCounts[statusFilter as DocumentOverviewStatus] > 0
+      })
+    }
+
+    list.sort(
+      (a, b) => (b.lastUploadedAt?.getTime() ?? 0) - (a.lastUploadedAt?.getTime() ?? 0),
+    )
+
+    return { patients: list, stats, generatedAt: new Date() }
+  }
+
+  /**
+   * Detailed document list for a single patient, including extraction status
+   * and how many lab tests were captured from each document.
+   */
+  async listPatientDocuments(patientId: string): Promise<PatientDocumentItem[]> {
+    const rows = await this.db
+      .select({
+        id: attachments.id,
+        fileName: attachments.fileName,
+        fileType: attachments.fileType,
+        mimeType: attachments.mimeType,
+        fileSize: attachments.fileSize,
+        createdAt: attachments.createdAt,
+        extractionId: documentExtractions.id,
+        status: documentExtractions.status,
+        documentType: documentExtractions.documentType,
+        confidence: documentExtractions.confidence,
+        processedAt: documentExtractions.processedAt,
+        error: documentExtractions.error,
+        structuredData: documentExtractions.structuredData,
+      })
+      .from(attachments)
+      .leftJoin(documentExtractions, eq(documentExtractions.attachmentId, attachments.id))
+      .where(and(eq(attachments.patientId, patientId), eq(attachments.isDeleted, false)))
+      .orderBy(desc(attachments.createdAt))
+
+    return rows.map((row) => ({
+      id: row.id,
+      fileName: row.fileName,
+      fileType: row.fileType,
+      mimeType: row.mimeType,
+      fileSize: row.fileSize,
+      createdAt: row.createdAt,
+      extractionId: row.extractionId ?? null,
+      status: (row.status as DocumentOverviewStatus | null) ?? 'none',
+      documentType: row.documentType ?? null,
+      confidence: row.confidence ?? null,
+      processedAt: row.processedAt ?? null,
+      error: row.error ?? null,
+      testCount: this.countExtractedTests(row.structuredData),
+      extractable: this.resolveMimeType(row.mimeType, row.fileName) !== null,
+    }))
+  }
+
+  /**
+   * Queue every eligible document belonging to the given patients. Documents
+   * already queued, processing, or confirmed are skipped unless `force` is
+   * set, in which case completed extractions are re-queued as well.
+   */
+  async queuePatients(
+    patientIds: string[],
+    options: { force?: boolean } = {},
+  ): Promise<{ queued: number; skipped: number; patients: number }> {
+    if (!this.isEnabled()) {
+      throw new AppError('Document AI is not enabled', 503)
+    }
+
+    const ids = Array.from(new Set(patientIds.filter(Boolean)))
+    if (ids.length === 0) return { queued: 0, skipped: 0, patients: 0 }
+
+    const rows = await this.db
+      .select({
+        attachmentId: attachments.id,
+        patientId: attachments.patientId,
+        mimeType: attachments.mimeType,
+        fileName: attachments.fileName,
+        extractionId: documentExtractions.id,
+        extractionStatus: documentExtractions.status,
+      })
+      .from(attachments)
+      .leftJoin(documentExtractions, eq(documentExtractions.attachmentId, attachments.id))
+      .where(and(inArray(attachments.patientId, ids), eq(attachments.isDeleted, false)))
+
+    let queued = 0
+    let skipped = 0
+    const touchedPatients = new Set<string>()
+
+    await this.db.transaction(async (tx) => {
+      for (const row of rows) {
+        if (!this.resolveMimeType(row.mimeType, row.fileName)) {
+          skipped++
+          continue
+        }
+
+        const status = row.extractionStatus
+        if (status === 'pending' || status === 'processing' || status === 'confirmed') {
+          skipped++
+          continue
+        }
+        if (status === 'completed' && !options.force) {
+          skipped++
+          continue
+        }
+
+        if (!row.extractionId) {
+          await tx
+            .insert(documentExtractions)
+            .values({ attachmentId: row.attachmentId, patientId: row.patientId, status: 'pending' })
+            .onConflictDoNothing()
+        } else {
+          await tx
+            .update(documentExtractions)
+            .set({
+              status: 'pending',
+              error: null,
+              attempts: 0,
+              processedAt: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(documentExtractions.id, row.extractionId))
+        }
+
+        await tx
+          .insert(documentProcessingJobs)
+          .values({ attachmentId: row.attachmentId })
+          .onConflictDoUpdate({
+            target: documentProcessingJobs.attachmentId,
+            set: {
+              status: 'queued',
+              attempts: 0,
+              nextAttemptAt: new Date(),
+              lockedAt: null,
+              lastError: null,
+            },
+          })
+
+        queued++
+        touchedPatients.add(row.patientId)
+      }
+    })
+
+    return { queued, skipped, patients: touchedPatients.size }
+  }
+
+  /**
+   * Confirm every completed extraction for a patient in one call, recording
+   * the extracted lab tests. Errors on individual documents are collected so
+   * one bad extraction does not block the rest.
+   */
+  async confirmPatientExtractions(
+    patientId: string,
+    attachmentIds: string[] | undefined,
+    userId?: string,
+  ): Promise<{ confirmed: number; failed: number; skipped: number; errors: string[] }> {
+    const rows = await this.db
+      .select({ attachmentId: documentExtractions.attachmentId })
+      .from(documentExtractions)
+      .innerJoin(attachments, eq(attachments.id, documentExtractions.attachmentId))
+      .where(
+        and(
+          eq(documentExtractions.patientId, patientId),
+          eq(documentExtractions.status, 'completed'),
+          eq(attachments.isDeleted, false),
+          attachmentIds && attachmentIds.length > 0
+            ? inArray(documentExtractions.attachmentId, attachmentIds)
+            : undefined,
+        ),
+      )
+
+    let confirmed = 0
+    let failed = 0
+    const errors: string[] = []
+
+    for (const row of rows) {
+      try {
+        await this.confirmExtraction(patientId, row.attachmentId, undefined, userId)
+        confirmed++
+      } catch (error) {
+        failed++
+        errors.push(error instanceof Error ? error.message : 'Failed to confirm extraction')
+      }
+    }
+
+    const totalRequested = attachmentIds?.length ?? rows.length
+    const skipped = Math.max(0, totalRequested - rows.length)
+
+    return { confirmed, failed, skipped, errors }
   }
 
   async getByAttachment(patientId: string, attachmentId: string): Promise<ExtractionView> {
@@ -572,6 +942,12 @@ export class DocumentExtractionService {
     const extraction = await this.findExtraction(patientId, attachmentId)
     if (!extraction) throw new NotFoundError('Document extraction')
     return extraction
+  }
+
+  private countExtractedTests(structuredData: unknown): number {
+    if (!structuredData || typeof structuredData !== 'object') return 0
+    const tests = (structuredData as { tests?: unknown }).tests
+    return Array.isArray(tests) ? tests.length : 0
   }
 
   private resolveMimeType(mimeType: string, fileName: string): string | null {

@@ -36,3 +36,37 @@ export async function documentIntelligenceRoutes(fastify: FastifyInstance) {
     (request, reply) => controller.reprocess(request, reply),
   )
 }
+
+/**
+ * Workspace endpoints, registered under `/api/document-intelligence`.
+ * Kept separate from the per-attachment routes above so the static
+ * `/overview` path cannot be mistaken for a patient id.
+ */
+export async function documentIntelligenceWorkspaceRoutes(fastify: FastifyInstance) {
+  const service = new DocumentExtractionService(fastify.db)
+  const controller = new DocumentIntelligenceController(service)
+
+  fastify.get<{ Querystring: { search?: string; status?: string } }>(
+    '/overview',
+    { preHandler: requireRole('admin_doctor', 'doctor') },
+    (request, reply) => controller.overview(request, reply),
+  )
+
+  fastify.get<{ Params: { patientId: string } }>(
+    '/patients/:patientId/documents',
+    { preHandler: requireRole('admin_doctor', 'doctor') },
+    (request, reply) => controller.patientDocuments(request, reply),
+  )
+
+  fastify.post<{ Body: { patientIds?: string[]; force?: boolean } }>(
+    '/queue',
+    { preHandler: requireRole('admin_doctor', 'doctor') },
+    (request, reply) => controller.queue(request, reply),
+  )
+
+  fastify.post<{ Params: { patientId: string }; Body: { attachmentIds?: string[] } }>(
+    '/patients/:patientId/confirm',
+    { preHandler: requireRole('admin_doctor', 'doctor') },
+    (request, reply) => controller.confirmPatient(request, reply),
+  )
+}
